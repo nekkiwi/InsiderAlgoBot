@@ -85,7 +85,7 @@ seaborn==0.13.2
 six==1.16.0
 soupsieve==2.5
 stack_data
-TA-Lib==0.4.24
+ta-lib
 tenacity==9.1.2
 threadpoolctl==3.5.0
 tomli==2.2.1
