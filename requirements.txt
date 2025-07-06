@@ -84,8 +84,8 @@ scipy==1.13.1
 seaborn==0.13.2
 six==1.16.0
 soupsieve==2.5
-stack_data==0.6.3
-TA-Lib==0.4.0
+stack_data
+TA-Lib
 tenacity==9.1.2
 threadpoolctl==3.5.0
 tomli==2.2.1
