@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from alpaca_trade_api.rest import REST
 from src.alpaca.utils.alpaca_trader_helpers import load_api_keys
 import time
+from dotenv import load_dotenv
 from datetime import timezone
 from src.alpaca.utils.alpaca_trader_helpers import load_api_keys
 from src.alpaca.utils.alpaca_trader_helpers import (
@@ -21,10 +22,9 @@ class AlpacaTrader:
     """
     def __init__(self):
         # Credentials and client
-        keys = load_api_keys(os.path.join(os.getcwd(), "src/alpaca/api_keys.json"))
-        print(os.path.join(os.getcwd(), "api_keys.json"))
-        self.api_key = keys['api_key']
-        self.api_secret = keys['api_secret_key']
+        load_dotenv()
+        self.api_key = os.getenv("ALPACA_API_KEY")
+        self.api_secret = os.getenv("ALPACA_API_SECRET_KEY")
     
         self.base_url = 'https://paper-api.alpaca.markets'
         self.client = REST(self.api_key, self.api_secret, self.base_url)
