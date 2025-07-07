@@ -1,171 +1,62 @@
 import os
-import pandas as pd
-from datetime import datetime
-from alpaca_trade_api.rest import REST
-from dotenv import load_dotenv
-from datetime import timezone, timedelta
 import time
+from datetime import timedelta
+import pandas as pd
+from dotenv import load_dotenv
+from alpaca_trade_api.rest import REST
 from src.alpaca.utils.alpaca_trader_helpers import (
-    get_latest_buy_order,
-    make_timezone_aware,
-    get_price_and_quantity,
-    submit_sell_order,
-    submit_buy_order,
     log_to_google_sheet,
-    get_fundamentals_and_prediction
+    sell_matured_positions,
+    place_order,
 )
 
 class AlpacaTrader:
-    """
-    Connects to Alpaca API, reads inference signals, places buy orders,
-    and schedules sell orders one month later.
-    """
+    """Orchestrates Alpaca buys and sells using external helper functions."""
+
     def __init__(self):
-        # Credentials and client
         load_dotenv()
-        self.api_key = os.getenv("ALPACA_API_KEY")
-        self.api_secret = os.getenv("ALPACA_API_SECRET_KEY")
-    
-        self.base_url = 'https://paper-api.alpaca.markets'
-        self.client = REST(self.api_key, self.api_secret, self.base_url)
+        self.client = REST(
+            os.getenv("ALPACA_API_KEY"),
+            os.getenv("ALPACA_API_SECRET_KEY"),
+            "https://paper-api.alpaca.markets",
+        )
 
-        # Trading settings
-        self.holding_period_days = 0
+    def sell_matured(self, holding_days: int):
+        sell_matured_positions(self.client, holding_days)
 
-        # Inference settings
-        self.inference_file_dir = 'data/inference/'
-        self.inference_file = ""
-        self.threshold = 0
+    @staticmethod
+    def read_signals(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+        df.columns = df.columns.str.strip()
+        symbol, score = df.columns[0], df.columns[2]
+        out = df.loc[df[score] >= threshold, [symbol, score]].copy()
+        out.columns = ["symbol", "score"]
+        return out
 
-    def sell_matured_positions(self):
-        print("- Checking for positions to sell...")
-        order_placed = False
-        try:
-            positions = self.client.list_positions()
-            if not positions:
-                print("ℹ️  No open positions to check.")
-                return order_placed
+    def buy_new(self, symbols, amount: float, results_df=None):
+        placed = False
+        for sym in symbols:
+            if place_order(self.client, sym, amount, results_df):
+                placed = True
+        return placed
 
-            for position in positions:
-                try:
-                    orders = get_latest_buy_order(self.client, position.symbol)
-                    if not orders:
-                        print(f"ℹ️  No buy order found for {position.symbol}.")
-                        continue
-
-                    purchase_date = make_timezone_aware(orders[0].filled_at)
-                    holding_duration = datetime.now(timezone.utc) - purchase_date
-
-                    if holding_duration.days > self.holding_period_days:
-                        print(f"ℹ️  Selling {position.symbol}, held {holding_duration.days} days.")
-                        submit_sell_order(self.client, position.symbol, position.qty)
-                        order_placed = True
-                        print(f"✅  SELL order placed for {position.qty} shares of {position.symbol}.")
-                        log_to_google_sheet(f"Sell executed: {position.symbol}, return of TBD%")
-
-                        print(f"✅  SELL order placed for {position.qty} shares of {position.symbol}.")
-                    else:
-                        print(f"{position.symbol} held {holding_duration.days} days — within holding period.")
-
-                except Exception as e:
-                    print(f"Error processing position {position.symbol}: {e}")
-
-        except Exception as e:
-            print(f"Error fetching open positions: {e}")
-        return order_placed
-
-    def read_signals(self, df) -> pd.DataFrame:
-        """
-        Load inference output, filter tickers with score >= threshold.
-        Expects first column 'Ticker', third column is score.
-        """
-        df.columns = [c.strip() for c in df.columns]
-        ticker_col = df.columns[0]
-        score_col = df.columns[2]
-        signals = df[df[score_col] >= self.threshold][[ticker_col, score_col]].copy()
-        signals.columns = ['symbol', 'score']
-        return signals
-
-    def place_orders(self, symbol, amount: float, results_df: pd.DataFrame = None):
-        print("- Checking for stocks to buy...")
-        order_placed = False
-        # Get currently held positions
-        held_symbols = {p.symbol for p in self.client.list_positions()}
-
-        # Get open (unfilled) buy orders
-        open_orders = self.client.list_orders(status='open')
-        open_buy_symbols = {o.symbol for o in open_orders if o.side == 'buy'}
-
-        if symbol in held_symbols:
-            print(f"ℹ️  Skipping {symbol}: already held.")
-            return order_placed
-
-        if symbol in open_buy_symbols:
-            print(f"ℹ️  Skipping {symbol}: buy order already open.")
-            return order_placed
-
-        try:
-            price, qty_to_buy = get_price_and_quantity(self.client, symbol, amount)
-
-            if qty_to_buy <= 0:
-                print(f"ℹ️  Skipping {symbol}: ${amount:.2f} < ${price:.2f}")
-                return order_placed
-
-            print(f"✅  Placing BUY for {qty_to_buy} shares of {symbol} at ~${price:.2f} for a total of: ${qty_to_buy * price:.2f}.")
-            submit_buy_order(self.client, symbol, qty_to_buy)
-            order_placed = True
-            
-            log_message = f"Buy executed: {symbol}"
-            if results_df is not None:
-                details = get_fundamentals_and_prediction(symbol, results_df)
-                log_message = f"{log_message}, {details}"
-
-            log_to_google_sheet(log_message)
-
-        except Exception as e:
-            print(f"Error buying {symbol}: {e}")
-        return order_placed
-
-
-    def run(self, config, results_df=None):
-        """
-        High-level orchestration: sell matured positions, then read signals and place new buy orders.
-
-        Config dict determines mode:
-            - Score-based: config contains only 'symbol'
-            - Threshold-based: config contains 'targets' and 'threshold'
-        """
-        start_time = time.time()
+    def run(self, config: dict, results_df: pd.DataFrame = None):
+        start = time.time()
         print("\n### START ### Alpaca Trader")
-        self.holding_period_days = config["holding_period"]
-        amount = config["amount"]
-        sell_order_placed = self.sell_matured_positions()
 
-        # --- THRESHOLD-BASED MODE ---
-        self.threshold = config["threshold"]
-        target = config["target"]
-        
-        if results_df is None: 
-            self.inference_file = os.path.join(self.inference_file_dir, f"{target}_inference_output.xlsx")
-            df = pd.read_excel(self.inference_file)
-        else:
-            df = results_df
-        signals = self.read_signals(df)
+        # 1) Sell any matured positions
+        self.sell_matured(config["holding_period"])
+
+        # 2) Load & filter signals
+        threshold, target = config["threshold"], config["target"]
+        signals = self.read_signals(results_df, threshold)
+
         if signals.empty:
-            print(f"\nNo new signals above threshold for {target}. Nothing to buy.")
-            log_to_google_sheet("No Action")
+            print(f"No signals ≥ {threshold} for {target}.")
+            log_to_google_sheet("No new good buy found")
         else:
-            buy_order_placed = False
-            for _, row in signals.iterrows():
-                flag = self.place_orders(row["symbol"], amount, results_df)
-                if flag:
-                    buy_order_placed = True
-    
-        if sell_order_placed == False and buy_order_placed == False:
-            log_to_google_sheet("No Action")
-        elapsed_time = timedelta(seconds=int(time.time() - start_time))
-        print(f"### END ### Alpaca Trader - time elapsed: {elapsed_time}")
+            symbols = signals["symbol"].tolist()
+            if not self.buy_new(symbols, config["amount"], results_df):
+                log_to_google_sheet("No new good buy found")
 
-if __name__ == '__main__':
-    trader = AlpacaTrader()
-    trader.run()
+        elapsed = timedelta(seconds=int(time.time() - start))
+        print(f"### END ### Elapsed: {elapsed}")

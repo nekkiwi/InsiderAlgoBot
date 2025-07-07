@@ -2,7 +2,7 @@ name: Run InsiderAlgoBot Daily
 
 on:
   schedule:
-    - cron: '00 15 * * *'  # Every day at 14:00 UTC (adjust as needed)
+    - cron: '00 14 * * *'  # Every day at 14:00 UTC (adjust as needed)
   workflow_dispatch:      # Allows manual run from GitHub
 
 jobs:

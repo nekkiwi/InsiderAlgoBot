@@ -3,6 +3,33 @@ import datetime
 import requests
 from bs4 import BeautifulSoup
 from io import StringIO
+from pandas.tseries.offsets import BDay
+
+def get_date_range(num_days):
+    # For each of the last `num_days` business days (skipping weekends), 
+    # build daily date ranges that cover that business day plus any following weekend days 
+    # (e.g. Fri→Sat→Sun on Mondays), and then fetch and parse each day in parallel.
+    today = pd.Timestamp.now().normalize()
+    # 1) Skip weekends entirely
+    if today.weekday() >= 5:  # 5=Sat, 6=Sun
+        print("🚫 Weekend — skipping fetch")
+        return
+
+    # 2) Find last completed business day
+    last_bd = today - BDay(1)
+    # 3) Get the last `num_days` business days
+    bdays = pd.bdate_range(end=last_bd, periods=num_days)
+
+    date_range = []
+    for bd in bdays:
+        # 4a) Next business day
+        next_bd = bd + BDay(1)
+        # 4b) The calendar range is bd → (next_bd - 1 day)
+        end_date = (next_bd - pd.Timedelta(days=1)).normalize()
+        # 4c) Explode into every calendar day in between
+        for day in pd.date_range(start=bd.normalize(), end=end_date, freq="D"):
+            date_range.append((day.to_pydatetime(), day.to_pydatetime()))
+    return date_range
 
 def clean_data(df, threshold=0.05):
     """
