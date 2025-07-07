@@ -1,4 +1,4 @@
-name: Run Daily Bot
+name: Run InsiderAlgoBot Daily
 
 on:
   schedule:
@@ -14,10 +14,13 @@ jobs:
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout code + activate LFS
         uses: actions/checkout@v3
         with:
-          lfs: true
+          lfs: 
+      
+      - name: Pull LFS objects
+        run: git lfs pull --all
 
       - name: Set up Python
         uses: actions/setup-python@v4
