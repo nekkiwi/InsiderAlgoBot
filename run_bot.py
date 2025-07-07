@@ -35,14 +35,10 @@ def main():
     # Excecute Trade #
     ##################
     
-    amount = 100 # €
-    holding_period = 30 # days
-    
-    # If just following the model, specify model and threshold
     config = {
         "amount": 100,
         "holding_period": 30,
-        "targets": ["final_return_1m_raw"],
+        "target": "final_return_1m_raw",
         "threshold": 0.06,
     }
     
