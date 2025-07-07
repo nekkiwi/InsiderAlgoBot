@@ -19,8 +19,8 @@ def main():
     # Get Current Data #
     ####################
 
-    current_features_df = feature_scraper.run(num_weeks=1, train=False)
-    current_features_df_preprocessed = feature_preprocessor.run(current_features_df, train=False)
+    current_features_df = feature_scraper.run(num_weeks=1)
+    current_features_df_preprocessed = feature_preprocessor.run(current_features_df)
     
     #################
     # Run Inference #
@@ -29,7 +29,7 @@ def main():
     models  = ['RandomForestOverSample']
     targets = ['final_return_1m_raw']
     
-    results_df = model_inference.run(current_features_df_preprocessed, models, targets, save_out=False)
+    results_df = model_inference.run(current_features_df_preprocessed, models, targets)
     
     ##################
     # Excecute Trade #
@@ -40,11 +40,13 @@ def main():
     
     # If just following the model, specify model and threshold
     config = {
+        "amount": 100,
+        "holding_period": 30,
         "targets": ["final_return_1m_raw"],
         "threshold": 0.06,
     }
     
-    alpaca_trader.run(config, amount, holding_period, results_df)
+    alpaca_trader.run(config, results_df)
     
 if __name__ == "__main__":
     main()

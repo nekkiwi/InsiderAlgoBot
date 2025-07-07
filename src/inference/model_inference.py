@@ -3,15 +3,13 @@ import joblib
 import pandas as pd
 from ast import literal_eval
 from sklearn.base import is_classifier
-
-from src.inference.utils.model_inference_helpers import load_feature_data
+from datetime import timedelta
+import time
 
 class ModelInference:
     def __init__(self):
         self.data_dir = os.path.join(os.path.dirname(__file__), '../../data')
         self.feature_selection_file = os.path.join(self.data_dir, "analysis/feature_selection/selected_features.xlsx")
-        self.scraped_data_file = os.path.join(self.data_dir, "final/current_features_final.xlsx")
-        self.output_dir = os.path.join(self.data_dir, "inference/")
         self.models = {}
         self.out_path = ""
         self.selected_features = []
@@ -82,18 +80,13 @@ class ModelInference:
         result[f'{target}_score'] = avg_pred
         return result
 
-    def save_output(self, result_df):
-        os.makedirs(self.output_dir, exist_ok=True)
-        result_df.to_excel(self.out_path, index=False)
-
-    def run(self, features_df, models, targets, save_out=True):
+    def run(self, features_df, models, targets):
         """
         Full pipeline: load models, features, data, filter, infer, save.
         """
-        if features_df is None:
-            self.data = load_feature_data(self.scraped_data_file)
-        else:
-            self.data = features_df
+        start_time = time.time()
+        print("\n### START ### Model Inference")
+        self.data = features_df
             
         for model in models:
             for target in targets: 
@@ -101,8 +94,6 @@ class ModelInference:
                 self.load_feature_selection(target)
                 self.filter_features()
                 result_df = self.run_inference(target)
-                if save_out: 
-                    self.out_path = os.path.join(self.output_dir, f'{target}_inference_output.xlsx')
-                    self.save_output(result_df)
-                    print(f"Inference results saved to {self.out_path}")
+        elapsed_time = timedelta(seconds=int(time.time() - start_time))
+        print(f"### END ### Model Inference - time elapsed: {elapsed_time}")
         return result_df

@@ -1,1 +1,11 @@
+# Python envs
+venv/
 .env
+
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# Editor files
+.vscode/
+.idea/
