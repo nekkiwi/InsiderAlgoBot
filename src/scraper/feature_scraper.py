@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from .utils.feature_scraper_helpers import *
 from .utils.technical_indicators_helpers import *
 from .utils.financial_ratios_helpers import *
+from src.alpaca.utils.alpaca_trader_helpers import log_to_google_sheet
 
 class FeatureScraper:
     def __init__(self):
@@ -19,13 +20,13 @@ class FeatureScraper:
         url = f"{self.base_url}pl=1&ph=&ll=&lh=&fd=-1&fdr={start_date.month}%2F{start_date.day}%2F{start_date.year}+-+{end_date.month}%2F{end_date.day}%2F{end_date.year}&td=0&tdr=&fdlyl=&fdlyh=&daysago=&xp=1&vl=10&vh=&ocl=&och=&sic1=-1&sicl=100&sich=9999&grp=0&nfl=&nfh=&nil=&nih=&nol=&noh=&v2l=&v2h=&oc2l=&oc2h=&sortcol=0&cnt=1000&page=1"
         return fetch_and_parse(url)
 
-    def fetch_data_from_pages(self, num_weeks):
+    def fetch_data_from_pages(self, num_days):
         end_date = datetime.datetime.now()
         date_ranges = []
 
         # Prepare the date ranges
-        for _ in range(num_weeks):
-            start_date = end_date - datetime.timedelta(days=7)  # Each range is 1 month
+        for _ in range(num_days):
+            start_date = end_date - datetime.timedelta(days=1)  # Each range is 1 month
             date_ranges.append((start_date, end_date))
             end_date = start_date  # Move back another month
 
@@ -46,7 +47,7 @@ class FeatureScraper:
             self.data = pd.concat(data_frames, ignore_index=True)
             print(f"- {len(self.data)} total entries extracted!")
         else:
-            print("- No data could be extracted.")
+            print(f"🚫 No trades were made in the past {num_days} days")
     
     def clean_table(self, drop_threshold=0.05):
         columns_of_interest = ["Filing Date", "Trade Date", "Ticker", "Title", "Price", "Qty", "Owned", "ΔOwn", "Value"]
@@ -175,10 +176,13 @@ class FeatureScraper:
         else:
             print(f"- File '{file_path}' does not exist.")
         
-    def run(self, num_weeks):
+    def run(self, num_days):
         start_time = time.time()
         print("\n### START ### Feature Scraper")
-        self.fetch_data_from_pages(num_weeks)
+        self.fetch_data_from_pages(num_days)
+        if self.data.empty:
+            log_to_google_sheet(f"No trades were made in the past {num_days} days")
+            return pd.DataFrame()
         self.clean_table(drop_threshold=0.05)
         self.add_technical_indicators(drop_threshold=0.05)
         self.add_financial_ratios(drop_threshold=0.2)
@@ -186,8 +190,4 @@ class FeatureScraper:
         elapsed_time = timedelta(seconds=int(time.time() - start_time))
         print(f"### END ### Feature Scraper - time elapsed: {elapsed_time}")
         return self.data
-        
-if __name__ == "__main__":
-    feature_scraper = FeatureScraper()
-    feature_scraper.run(num_weeks=12*4)
     

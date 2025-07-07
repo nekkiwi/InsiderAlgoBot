@@ -19,7 +19,9 @@ def main():
     # Get Current Data #
     ####################
 
-    current_features_df = feature_scraper.run(num_weeks=1)
+    current_features_df = feature_scraper.run(num_days=2)
+    if current_features_df.empty:
+        return
     current_features_df_preprocessed = feature_preprocessor.run(current_features_df)
     
     #################

@@ -11,6 +11,8 @@ from src.alpaca.utils.alpaca_trader_helpers import (
     get_price_and_quantity,
     submit_sell_order,
     submit_buy_order,
+    log_to_google_sheet,
+    get_fundamentals_and_prediction
 )
 
 class AlpacaTrader:
@@ -37,11 +39,12 @@ class AlpacaTrader:
 
     def sell_matured_positions(self):
         print("- Checking for positions to sell...")
+        order_placed = False
         try:
             positions = self.client.list_positions()
             if not positions:
                 print("ℹ️  No open positions to check.")
-                return
+                return order_placed
 
             for position in positions:
                 try:
@@ -56,6 +59,10 @@ class AlpacaTrader:
                     if holding_duration.days > self.holding_period_days:
                         print(f"ℹ️  Selling {position.symbol}, held {holding_duration.days} days.")
                         submit_sell_order(self.client, position.symbol, position.qty)
+                        order_placed = True
+                        print(f"✅  SELL order placed for {position.qty} shares of {position.symbol}.")
+                        log_to_google_sheet(f"Sell executed: {position.symbol}, return of TBD%")
+
                         print(f"✅  SELL order placed for {position.qty} shares of {position.symbol}.")
                     else:
                         print(f"{position.symbol} held {holding_duration.days} days — within holding period.")
@@ -65,6 +72,7 @@ class AlpacaTrader:
 
         except Exception as e:
             print(f"Error fetching open positions: {e}")
+        return order_placed
 
     def read_signals(self, df) -> pd.DataFrame:
         """
@@ -78,9 +86,9 @@ class AlpacaTrader:
         signals.columns = ['symbol', 'score']
         return signals
 
-    def place_orders(self, symbol, amount: float):
+    def place_orders(self, symbol, amount: float, results_df: pd.DataFrame = None):
         print("- Checking for stocks to buy...")
-
+        order_placed = False
         # Get currently held positions
         held_symbols = {p.symbol for p in self.client.list_positions()}
 
@@ -90,24 +98,33 @@ class AlpacaTrader:
 
         if symbol in held_symbols:
             print(f"ℹ️  Skipping {symbol}: already held.")
-            return
+            return order_placed
 
         if symbol in open_buy_symbols:
             print(f"ℹ️  Skipping {symbol}: buy order already open.")
-            return
+            return order_placed
 
         try:
             price, qty_to_buy = get_price_and_quantity(self.client, symbol, amount)
 
             if qty_to_buy <= 0:
                 print(f"ℹ️  Skipping {symbol}: ${amount:.2f} < ${price:.2f}")
-                return
+                return order_placed
 
             print(f"✅  Placing BUY for {qty_to_buy} shares of {symbol} at ~${price:.2f} for a total of: ${qty_to_buy * price:.2f}.")
             submit_buy_order(self.client, symbol, qty_to_buy)
+            order_placed = True
+            
+            log_message = f"Buy executed: {symbol}"
+            if results_df is not None:
+                details = get_fundamentals_and_prediction(symbol, results_df)
+                log_message = f"{log_message}, {details}"
+
+            log_to_google_sheet(log_message)
 
         except Exception as e:
             print(f"Error buying {symbol}: {e}")
+        return order_placed
 
 
     def run(self, config, results_df=None):
@@ -122,7 +139,7 @@ class AlpacaTrader:
         print("\n### START ### Alpaca Trader")
         self.holding_period_days = config["holding_period"]
         amount = config["amount"]
-        self.sell_matured_positions()
+        sell_order_placed = self.sell_matured_positions()
 
         # --- THRESHOLD-BASED MODE ---
         self.threshold = config["threshold"]
@@ -136,10 +153,16 @@ class AlpacaTrader:
         signals = self.read_signals(df)
         if signals.empty:
             print(f"\nNo new signals above threshold for {target}. Nothing to buy.")
+            log_to_google_sheet("No Action")
         else:
+            buy_order_placed = False
             for _, row in signals.iterrows():
-                self.place_orders(row["symbol"], amount)
+                flag = self.place_orders(row["symbol"], amount, results_df)
+                if flag:
+                    buy_order_placed = True
     
+        if sell_order_placed == False and buy_order_placed == False:
+            log_to_google_sheet("No Action")
         elapsed_time = timedelta(seconds=int(time.time() - start_time))
         print(f"### END ### Alpaca Trader - time elapsed: {elapsed_time}")
 
