@@ -124,26 +124,22 @@ class AlpacaTrader:
         amount = config["amount"]
         self.sell_matured_positions()
 
-        if "symbol" in config and len(config) == 1:
-            # --- SCORE-BASED MODE ---
-            self.place_orders(config["symbol"], amount)
-        elif "targets" in config and "threshold" in config:
-            # --- THRESHOLD-BASED MODE ---
-            self.threshold = config["threshold"]
-            for target in config["targets"]:
-                if results_df is None: 
-                    self.inference_file = os.path.join(self.inference_file_dir, f"{target}_inference_output.xlsx")
-                    df = pd.read_excel(self.inference_file)
-                else:
-                    df = results_df
-                signals = self.read_signals(df)
-                if signals.empty:
-                    print(f"\nNo new signals above threshold for {target}. Nothing to buy.")
-                else:
-                    for _, row in signals.iterrows():
-                        self.place_orders(row["symbol"], amount)
+        # --- THRESHOLD-BASED MODE ---
+        self.threshold = config["threshold"]
+        self.target = config["target"]
+        
+        if results_df is None: 
+            self.inference_file = os.path.join(self.inference_file_dir, f"{target}_inference_output.xlsx")
+            df = pd.read_excel(self.inference_file)
         else:
-            raise ValueError("❌ Invalid config: must contain either only 'symbol', or both 'targets' and 'threshold'")
+            df = results_df
+        signals = self.read_signals(df)
+        if signals.empty:
+            print(f"\nNo new signals above threshold for {target}. Nothing to buy.")
+        else:
+            for _, row in signals.iterrows():
+                self.place_orders(row["symbol"], amount)
+    
         elapsed_time = timedelta(seconds=int(time.time() - start_time))
         print(f"### END ### Alpaca Trader - time elapsed: {elapsed_time}")
 
