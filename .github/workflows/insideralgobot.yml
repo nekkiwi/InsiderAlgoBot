@@ -20,7 +20,7 @@ jobs:
           lfs: 
       
       - name: Pull LFS objects
-        run: git lfs pull --all
+        run: git lfs pull
 
       - name: Set up Python
         uses: actions/setup-python@v4
