@@ -126,7 +126,7 @@ class AlpacaTrader:
 
         # --- THRESHOLD-BASED MODE ---
         self.threshold = config["threshold"]
-        self.target = config["target"]
+        target = config["target"]
         
         if results_df is None: 
             self.inference_file = os.path.join(self.inference_file_dir, f"{target}_inference_output.xlsx")
