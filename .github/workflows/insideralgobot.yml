@@ -12,6 +12,7 @@ jobs:
     env:
       ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+      GOOGLE_SHEET_CREDS_JSON: ${{ secrets.GOOGLE_SHEET_CREDS_JSON }}
 
     steps:
       - name: Checkout code + activate LFS
