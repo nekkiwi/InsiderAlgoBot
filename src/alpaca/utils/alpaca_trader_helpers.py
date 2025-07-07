@@ -1,10 +1,3 @@
-import json
-from datetime import timezone
-
-def load_api_keys(filepath):
-    with open(filepath, "r") as f:
-        return json.load(f)
-    
 from datetime import timezone
 
 def get_latest_buy_order(client, symbol):

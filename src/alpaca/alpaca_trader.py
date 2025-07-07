@@ -1,12 +1,10 @@
 import os
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from alpaca_trade_api.rest import REST
-from src.alpaca.utils.alpaca_trader_helpers import load_api_keys
-import time
 from dotenv import load_dotenv
-from datetime import timezone
-from src.alpaca.utils.alpaca_trader_helpers import load_api_keys
+from datetime import timezone, timedelta
+import time
 from src.alpaca.utils.alpaca_trader_helpers import (
     get_latest_buy_order,
     make_timezone_aware,
@@ -38,27 +36,27 @@ class AlpacaTrader:
         self.threshold = 0
 
     def sell_matured_positions(self):
-        print("Checking for positions to sell...")
+        print("- Checking for positions to sell...")
         try:
             positions = self.client.list_positions()
             if not positions:
-                print("No open positions to check.")
+                print("ℹ️  No open positions to check.")
                 return
 
             for position in positions:
                 try:
                     orders = get_latest_buy_order(self.client, position.symbol)
                     if not orders:
-                        print(f"No buy order found for {position.symbol}.")
+                        print(f"ℹ️  No buy order found for {position.symbol}.")
                         continue
 
                     purchase_date = make_timezone_aware(orders[0].filled_at)
                     holding_duration = datetime.now(timezone.utc) - purchase_date
 
                     if holding_duration.days > self.holding_period_days:
-                        print(f"Selling {position.symbol}, held {holding_duration.days} days.")
+                        print(f"ℹ️  Selling {position.symbol}, held {holding_duration.days} days.")
                         submit_sell_order(self.client, position.symbol, position.qty)
-                        print(f"SELL order placed for {position.qty} shares of {position.symbol}.")
+                        print(f"✅  SELL order placed for {position.qty} shares of {position.symbol}.")
                     else:
                         print(f"{position.symbol} held {holding_duration.days} days — within holding period.")
 
@@ -81,7 +79,7 @@ class AlpacaTrader:
         return signals
 
     def place_orders(self, symbol, amount: float):
-        print("\nChecking for stocks to buy...")
+        print("- Checking for stocks to buy...")
 
         # Get currently held positions
         held_symbols = {p.symbol for p in self.client.list_positions()}
@@ -91,28 +89,28 @@ class AlpacaTrader:
         open_buy_symbols = {o.symbol for o in open_orders if o.side == 'buy'}
 
         if symbol in held_symbols:
-            print(f"Skipping {symbol}: already held.")
+            print(f"ℹ️  Skipping {symbol}: already held.")
             return
 
         if symbol in open_buy_symbols:
-            print(f"Skipping {symbol}: buy order already open.")
+            print(f"ℹ️  Skipping {symbol}: buy order already open.")
             return
 
         try:
             price, qty_to_buy = get_price_and_quantity(self.client, symbol, amount)
 
             if qty_to_buy <= 0:
-                print(f"Skipping {symbol}: ${amount:.2f} < ${price:.2f}")
+                print(f"ℹ️  Skipping {symbol}: ${amount:.2f} < ${price:.2f}")
                 return
 
-            print(f"Placing BUY for {qty_to_buy} shares of {symbol} at ~${price:.2f} for a total of: ${qty_to_buy * price:.2f}.")
+            print(f"✅  Placing BUY for {qty_to_buy} shares of {symbol} at ~${price:.2f} for a total of: ${qty_to_buy * price:.2f}.")
             submit_buy_order(self.client, symbol, qty_to_buy)
 
         except Exception as e:
             print(f"Error buying {symbol}: {e}")
 
 
-    def run(self, config, amount, holding_period, results_df=None):
+    def run(self, config, results_df=None):
         """
         High-level orchestration: sell matured positions, then read signals and place new buy orders.
 
@@ -120,7 +118,10 @@ class AlpacaTrader:
             - Score-based: config contains only 'symbol'
             - Threshold-based: config contains 'targets' and 'threshold'
         """
-        self.holding_period_days = holding_period
+        start_time = time.time()
+        print("\n### START ### Alpaca Trader")
+        self.holding_period_days = config["holding_period"]
+        amount = config["amount"]
         self.sell_matured_positions()
 
         if "symbol" in config and len(config) == 1:
@@ -143,10 +144,9 @@ class AlpacaTrader:
                         self.place_orders(row["symbol"], amount)
         else:
             raise ValueError("❌ Invalid config: must contain either only 'symbol', or both 'targets' and 'threshold'")
+        elapsed_time = timedelta(seconds=int(time.time() - start_time))
+        print(f"### END ### Alpaca Trader - time elapsed: {elapsed_time}")
 
-
-        
-        
 if __name__ == '__main__':
     trader = AlpacaTrader()
     trader.run()
