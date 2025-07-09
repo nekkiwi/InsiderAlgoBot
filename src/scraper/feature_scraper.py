@@ -32,7 +32,7 @@ class FeatureScraper:
                 tqdm(
                     pool.imap(self.process_web_page, date_range),
                     total=len(date_range),
-                    desc=f"- Scraping entries from openinsider.com for today"
+                    desc=f"- Scraping entries from openinsider.com for {date_range}"
                 )
             )
 
