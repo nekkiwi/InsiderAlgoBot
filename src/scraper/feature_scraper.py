@@ -51,10 +51,6 @@ class FeatureScraper:
         self.data = self.data[columns_of_interest]
         self.data = process_dates(self.data)
         
-        # Filter out entries where Filing Date is less than 20 business days in the past
-        cutoff_date = pd.to_datetime('today')
-        self.data = self.data[self.data['Filing Date'] < cutoff_date]
-        
         # Clean numeric columns
         self.data = clean_numeric_columns(self.data)
         
