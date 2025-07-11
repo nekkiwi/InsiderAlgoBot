@@ -3,7 +3,7 @@ import gspread
 import json
 import os
 from google.oauth2.service_account import Credentials
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import time
 
@@ -87,7 +87,11 @@ def log_to_google_sheet(message: str):
     # Open sheet and worksheet
     sh = gc.open("InsiderAlgoBot - Log")
     worksheet = sh.sheet1
-    now = datetime.now(timezone.utc+2)
+    # create a UTC+2 timezone
+    cet = timezone(timedelta(hours=2))
+    
+    # get current time in UTC+2
+    now = datetime.now(cet)
     date_str = now.strftime("%d/%m/%Y")   # e.g. “07/07/2025”
     time_str = now.strftime("%H:%M")      # e.g. “14:35”
 
