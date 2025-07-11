@@ -37,20 +37,19 @@ jobs:
         run: |
           curl https://rclone.org/install.sh | sudo bash
 
-      - name: Download data from Google Drive
+      - name: Download models from Google Drive
         env:
           # This configures rclone to access Google Drive using your service account
           RCLONE_CONFIG_GDRIVE_TYPE: drive
           RCLONE_CONFIG_GDRIVE_SCOPE: drive.readonly
           RCLONE_CONFIG_GDRIVE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SHEET_CREDS_JSON }}
-          
-          # The name of the file you want to download from your Google Drive folder
-          # Make sure to change this to the actual name of your file
-          FILE_NAME: 'your-large-file.dat' 
         run: |
-          # Downloads the specified file from the Google Drive folder into the workflow's current directory
-          rclone copy "gdrive,root_folder_id=${{ env.GDRIVE_FOLDER_ID }}:${{ env.FILE_NAME }}" .
-          echo "Download of ${{ env.FILE_NAME }} complete."
+          # Create the target directory
+          mkdir -p data/models
+
+          # Download all files from the Google Drive folder into data/models
+          rclone copy "gdrive,root_folder_id=${{ env.GDRIVE_FOLDER_ID }}:" "data/models/"
+          echo "Model download complete."
 
       - name: Run bot
         run: |
