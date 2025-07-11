@@ -50,10 +50,6 @@ jobs:
           # Download all files from the Google Drive folder into data/models
           rclone copy "gdrive,root_folder_id=${{ env.GDRIVE_FOLDER_ID }}:" "data/models/"
           echo "Model download complete."
-      - name: Verify downloaded models
-        run: |
-          echo "Verifying contents of data/models/ directory..."
-          ls -lR data/models
 
       - name: Run bot
         run: |
