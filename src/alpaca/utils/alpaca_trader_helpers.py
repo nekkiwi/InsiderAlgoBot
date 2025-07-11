@@ -87,7 +87,7 @@ def log_to_google_sheet(message: str):
     # Open sheet and worksheet
     sh = gc.open("InsiderAlgoBot - Log")
     worksheet = sh.sheet1
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc+2)
     date_str = now.strftime("%d/%m/%Y")   # e.g. “07/07/2025”
     time_str = now.strftime("%H:%M")      # e.g. “14:35”
 
