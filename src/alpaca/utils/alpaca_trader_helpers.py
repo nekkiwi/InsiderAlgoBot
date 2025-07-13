@@ -53,23 +53,21 @@ def get_fundamentals_and_prediction(ticker: str, results_df) -> str:
     def parse_ratio(val):
         try:
             return round(float(val), 2)
-        except:
+        except (ValueError, TypeError):
             return "NA"
 
     try:
         stock = finvizfinance(ticker)
         info = stock.ticker_fundament()
-
-        pe = parse_ratio(info.get("P/E"))
-        ps = parse_ratio(info.get("P/S"))
-        de = parse_ratio(info.get("Debt/Eq"))
-    except Exception as e:
+        pe, ps, de = parse_ratio(info.get("P/E")), parse_ratio(info.get("P/S")), parse_ratio(info.get("Debt/Eq"))
+    except Exception:
         pe, ps, de = "NA", "NA", "NA"
 
     try:
-        pred_score = results_df.loc[results_df['Ticker'] == ticker, 'final_return_1m_raw_score'].values[0]
+        # --- FIX: Use the 'Predicted_Return' column from the results_df ---
+        pred_score = results_df.loc[results_df['Ticker'] == ticker, 'Predicted_Return'].values[0]
         pred_score = round(float(pred_score), 4)
-    except Exception:
+    except (IndexError, ValueError, TypeError):
         pred_score = "NA"
 
     return f"P/E={pe}, P/S={ps}, D/E={de}, Pred={pred_score}"

@@ -36,4 +36,4 @@ jobs:
 
       - name: Run bot
         run: |
-          python run_bot.py
+          python run_bot.py --timepoint "1w" --threshold_pct 0

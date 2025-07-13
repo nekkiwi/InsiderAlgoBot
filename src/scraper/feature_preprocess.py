@@ -2,77 +2,121 @@ import os
 import pandas as pd
 from datetime import timedelta
 import time
+import joblib
 
+# Import helper functions
 from .utils.feature_preprocess_helpers import *
 
 class FeaturePreprocessor:
     def __init__(self):
-        data_dir = os.path.join(os.path.dirname(__file__), '../../data')
+        """
+        Initializes the preprocessor. For inference, strategy parameters are required
+        to load the correct artifacts.
+        """
         self.data = pd.DataFrame()
+        self.ticker_filing_dates = None
         self.continuous_features = None
         self.categorical_features = None
         self.corr_matrix = None
-        self.ticker_filing_dates = None
-        self.normalization_params = {}
-        self.normalization_path = os.path.join(data_dir,'analysis/feature_preprocess/normalization_params.xlsx')
+
+        # --- Parameters for loading inference artifacts ---
+        self.model_type = "LightGBM"
+        self.category = "alpha"
+
+        # --- Base directory for locating model artifacts ---
+        self.base_dir = os.path.join(os.path.dirname(__file__), '../../data')
+        self.models_dir = os.path.join(self.base_dir, 'models')
+        
+        # --- Placeholders for loaded artifacts ---
+        self.final_scaler = None
+        self.final_features = None
+
+    def _load_inference_artifacts(self):
+        """Loads the final scaler and feature list for a specific model strategy."""
+        if not all([self.model_type, self.category, self.timepoint, self.threshold_pct is not None]):
+            raise ValueError("For inference, model_type, category, timepoint, and threshold_pct must be provided during initialization.")
+
+        strategy_dir_name = f"{self.model_type}_{self.category}_{self.timepoint}_{self.threshold_pct}pct"
+        strategy_path = os.path.join(self.models_dir, strategy_dir_name)
+
+        scaler_path = os.path.join(strategy_path, 'final_scaler.joblib')
+        features_path = os.path.join(strategy_path, 'final_features.joblib')
+
+        if not os.path.exists(scaler_path) or not os.path.exists(features_path):
+            raise FileNotFoundError(f"Inference artifacts not found in '{strategy_path}'. Ensure the final model has been trained for this strategy.")
+
+        print(f"- Loading inference artifacts from: {strategy_dir_name}")
+        self.final_scaler = joblib.load(scaler_path)
+        self.final_features = joblib.load(features_path)
 
     def prepare_data(self):
         self.data['Filing Date'] = pd.to_datetime(self.data['Filing Date'], dayfirst=True, errors='coerce')
         self.ticker_filing_dates = get_ticker_filing_dates(self.data)
-        if self.data is not None and self.ticker_filing_dates is not None:
-            self.data.drop(columns=['Ticker', 'Filing Date'], inplace=True)
-        else:
-            raise ValueError("- Failed to load feature data. Please check the file and its contents.")
+        cols_to_drop = [col for col in ['Ticker', 'Filing Date'] if col in self.data.columns]
+        if cols_to_drop:
+            self.data.drop(columns=cols_to_drop, inplace=True)
 
-    def prepare_filing_dates(self):
-        features_cleaned = prepare_filing_dates(self.data, self.ticker_filing_dates)
+    def save_feature_data(self, file_path, train):
+        features_cleaned = save_feature_data(self.data, self.ticker_filing_dates, file_path, train)
         return features_cleaned
 
     def identify_feature_types(self):
         self.categorical_features, self.continuous_features = identify_feature_types(self.data)
 
-        
-    def normalize_before_inference(self):
-        # Read normalization parameters from Excel
-        norm_params = pd.read_excel(self.normalization_path)
+    def filter_low_variance_features(self, variance_threshold=0.02, categorical_threshold=0.02):
+        cont_df = self.data[self.continuous_features]
+        cat_df  = self.data[self.categorical_features]
+        self.data, cont_df_filtered, cat_df_filtered = filter_low_variance_features(
+            self.data, cont_df, cat_df, variance_threshold, categorical_threshold
+        )
+        self.continuous_features = cont_df_filtered.columns.tolist()
+        self.categorical_features = cat_df_filtered.columns.tolist()
 
-        # Ensure proper column naming
-        norm_params.columns = ['key', 'min', 'max']
-        
-        # Clean numerical formatting (handle commas)
-        norm_params['min'] = norm_params['min'].replace(",", "")
-        norm_params['max'] = norm_params['max'].replace(",", "")
+    def calculate_and_plot_correlations(self, output_dir):
+        cont_df = self.data[self.continuous_features]
+        cat_df  = self.data[self.categorical_features]
+        self.corr_matrix = hybrid_correlation_matrix(self.data, cont_df, cat_df)
+        plot_correlation_heatmap(self.corr_matrix, output_dir)
+        plot_sorted_correlations(self.corr_matrix, output_dir)
 
-        # Create a dictionary for fast lookup
-        normalization_dict = norm_params.set_index('key')[['min', 'max']].to_dict('index')
+    def drop_highly_correlated_features(self, threshold=0.9):
+        self.data, self.corr_matrix = drop_highly_correlated_features(
+            self.data, self.corr_matrix, threshold
+        )
 
-        # Normalize each column in df based on the params
-        for col in self.data.columns:
-            if col in normalization_dict:
-                min_val = normalization_dict[col]['min']
-                max_val = normalization_dict[col]['max']
-                # Min-max normalization
-                self.data[col] = (self.data[col] - min_val) / (max_val - min_val)
-
-
-    def run(self, features_df):
+    def run(self, features_df: pd.DataFrame, timepoint, threshold_pct):
         start_time = time.time()
         print("\n### START ### Feature Preprocessing")
 
-        """Run the full analysis pipeline."""
+        self.data = features_df.copy()
         
-        self.data = features_df
+        self.timepoint = timepoint
+        self.threshold_pct = threshold_pct
             
+        # Feature engineering is applied to both training and inference data first.
+        self.data = engineer_new_features(self.data)
         self.prepare_data()
-        self.identify_feature_types()
-        self.normalize_before_inference()
-        features_cleaned = self.prepare_filing_dates()
+
+        # The inference path loads artifacts and applies them without discovery.
+        print("- Running preprocessing for INFERENCE...")
+        self._load_inference_artifacts()
+
+        # Align columns to match the exact feature set used for training
+        print(f"- Aligning data to the {len(self.final_features)} features used for training.")
+        self.data = self.data.reindex(columns=self.final_features, fill_value=0)
+
+        # Identify continuous features from the final, aligned feature set
+        _, continuous_features_to_scale = identify_feature_types(self.data)
+        
+        # Apply the saved scaler to the continuous features
+        if continuous_features_to_scale:
+            print(f"- Applying final scaler to {len(continuous_features_to_scale)} continuous features.")
+            self.data[continuous_features_to_scale] = self.final_scaler.transform(self.data[continuous_features_to_scale])
+        
+        # Re-attach Ticker/Date for output and return the processed DataFrame
+        features_cleaned = self.save_feature_data('', train=False)
 
         elapsed_time = timedelta(seconds=int(time.time() - start_time))
         print(f"### END ### Feature Preprocess - time elapsed: {elapsed_time}")
 
         return features_cleaned
-
-if __name__ == "__main__":
-    preprocessor = FeaturePreprocessor()
-    preprocessor.run()

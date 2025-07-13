@@ -1,3 +1,5 @@
+# In src/alpaca/alpaca_trader.py
+
 import os
 import time
 from datetime import timedelta
@@ -11,8 +13,6 @@ from src.alpaca.utils.alpaca_trader_helpers import (
 )
 
 class AlpacaTrader:
-    """Orchestrates Alpaca buys and sells using external helper functions."""
-
     def __init__(self):
         load_dotenv()
         self.client = REST(
@@ -25,10 +25,19 @@ class AlpacaTrader:
         sell_matured_positions(self.client, holding_days)
 
     @staticmethod
-    def read_signals(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
-        df.columns = df.columns.str.strip()
-        symbol, score = df.columns[0], df.columns[2]
-        out = df.loc[df[score] >= threshold, [symbol, score]].copy()
+    def read_signals(results_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Reads signals from the inference results DataFrame. A signal is valid
+        only if the 'Final_Signal' column is 1.
+        """
+        # --- FIX: Filter directly on the 'Final_Signal' column ---
+        buy_signals_df = results_df[results_df['Final_Signal'] == 1].copy()
+
+        if buy_signals_df.empty:
+            return pd.DataFrame(columns=["symbol", "score"])
+
+        # Use Ticker for symbol and Predicted_Return as the score for logging
+        out = buy_signals_df[['Ticker', 'Predicted_Return']].copy()
         out.columns = ["symbol", "score"]
         return out
 
@@ -47,11 +56,11 @@ class AlpacaTrader:
         self.sell_matured(config["holding_period"])
 
         # 2) Load & filter signals
-        threshold, target = config["threshold"], config["target"]
-        signals = self.read_signals(results_df, threshold)
+        # --- FIX: Logic is simplified to trust the inference output ---
+        signals = self.read_signals(results_df)
 
         if signals.empty:
-            print(f"No signals ≥ {threshold} for {target}.")
+            print("No valid 'buy' signals found in inference results.")
             log_to_google_sheet("No new good buy found")
         else:
             symbols = signals["symbol"].tolist()

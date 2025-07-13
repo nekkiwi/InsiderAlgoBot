@@ -14,6 +14,7 @@ class FeatureScraper:
     def __init__(self):
         self.base_url = "http://openinsider.com/screener?"
         self.data = pd.DataFrame()
+        self.train = False
         
     def process_web_page(self, date_range):
         start_date, end_date = date_range
@@ -32,7 +33,7 @@ class FeatureScraper:
                 tqdm(
                     pool.imap(self.process_web_page, date_range),
                     total=len(date_range),
-                    desc=f"- Scraping entries from openinsider.com for today"
+                    desc=f"- Scraping entries from openinsider.com for {date_range}"
                 )
             )
 
@@ -49,9 +50,8 @@ class FeatureScraper:
     def clean_table(self, drop_threshold=0.05):
         columns_of_interest = ["Filing Date", "Trade Date", "Ticker", "Title", "Price", "Qty", "Owned", "ΔOwn", "Value"]
         self.data = self.data[columns_of_interest]
+        # This function correctly converts the column to datetime objects initially
         self.data = process_dates(self.data)
-        
-        # Filter out entries where Filing Date is less than 20 business days in the past
         cutoff_date = pd.to_datetime('today')
         self.data = self.data[self.data['Filing Date'] < cutoff_date]
         
@@ -72,11 +72,14 @@ class FeatureScraper:
         # Group by Ticker and Filing Date, then aggregate
         self.data = aggregate_group(self.data)
         
-        # Format the date column and drop any remaining rows with missing values
-        self.data['Filing Date'] = self.data['Filing Date'].dt.strftime('%d-%m-%Y %H:%M')
+        # --- THIS IS THE KEY FIX ---
+        # Ensure 'Filing Date' remains a datetime object and is not converted to a string.
+        # We remove any string formatting like .dt.strftime().
+        self.data['Filing Date'] = pd.to_datetime(self.data['Filing Date'])
         
-        # Clean the data by dropping columns with more than 5% missing values and then dropping rows with missing values
+        # Clean the data by dropping columns and rows with missing values
         self.data = clean_data(self.data, drop_threshold)
+
 
         
     def add_technical_indicators(self, drop_threshold=0.05):
@@ -84,13 +87,7 @@ class FeatureScraper:
         
         # Apply technical indicators
         with Pool(cpu_count()) as pool:
-            processed_rows = list(
-                tqdm(
-                    pool.imap(process_ticker_technical_indicators, rows),
-                    total=len(rows),
-                    desc="- Scraping technical indicators"
-                )
-            )
+            processed_rows = list(tqdm(pool.imap(process_ticker_technical_indicators, rows), total=len(rows), desc="- Scraping technical indicators"))
         
         self.data = pd.DataFrame(filter(None, processed_rows))
         
@@ -101,64 +98,81 @@ class FeatureScraper:
         self.data = clean_data(self.data, drop_threshold)
 
 
-    def add_financial_ratios(self, drop_threshold=0.05):
+    def add_financial_ratios(self, drop_threshold=0.2):
         """
-        Scrape financial ratios in parallel using all CPUs,
-        then expand 'Sector' into dummies and clean missing data.
+        Fetches financial ratios and merges them using a robust strategy
+        to ensure the merge keys align correctly.
         """
-        rows = self.data.to_dict('records')
+        if self.data.empty:
+            print("- Data is empty, skipping financial ratio processing.")
+            return
+
+        print(f"[INFO] Fetching financial ratios for {len(self.data)} entries...")
+        ratios_df = batch_fetch_financial_data(self.data[['Ticker', 'Filing Date']])
+
+        if ratios_df.empty:
+            print("- Could not fetch any financial ratios. Continuing without new data.")
+            return
+
+        # --- Robust Merge Preparation ---
+        # 1. Ensure the merge key ('Filing Date') is a consistent datetime type in both DataFrames.
+        #    This is the most critical step to prevent key misalignment and merge failures.
+        self.data['Filing Date'] = pd.to_datetime(self.data['Filing Date'])
+        ratios_df['Filing Date'] = pd.to_datetime(ratios_df['Filing Date'])
+
+        # --- End of Preparation ---
+
+        # 2. Perform the merge. It will now align correctly because the keys are of the same type.
+        print(f"[INFO] Merging {len(ratios_df)} new financial ratios into the dataset.")
+        self.data = pd.merge(self.data, ratios_df, on=['Ticker', 'Filing Date'], how='left')
         
-        # Parallelize the I/O‐bound financial‐ratio scraping
-        with Pool(cpu_count()) as pool:
-            processed_rows = list(
-                tqdm(
-                    pool.imap(process_ticker_financial_ratios, rows),
-                    total=len(rows),
-                    desc="- Scraping financial ratios"
-                )
-            )
-        
-        # Drop any Nones and rebuild DataFrame
-        self.data = pd.DataFrame(filter(None, processed_rows))
-        
-        # If there's a Sector column, one‐hot encode it
+        # 3. Process and clean the newly merged data.
         if 'Sector' in self.data.columns:
-            sector_dummies = pd.get_dummies(
-                self.data['Sector'], prefix='Sector', dtype=int
-            )
-            # drop original and concat dummies
-            self.data = pd.concat(
-                [self.data.drop(columns=['Sector']), sector_dummies],
-                axis=1
-            )
+            sector_dummies = pd.get_dummies(self.data['Sector'], prefix='Sector', dtype=int)
+            self.data = pd.concat([self.data, sector_dummies], axis=1)
+            self.data.drop(columns=['Sector'], inplace=True)
         
-        # Replace any infinite values and clean by threshold + dropping NaNs
-        self.data.replace([np.inf, -np.inf], np.nan, inplace=True)
         self.data = clean_data(self.data, drop_threshold)
+        print(f"[INFO] Financial ratio processing complete. DataFrame now has {len(self.data.columns)} columns.")
 
 
-    def add_insider_transactions(self, drop_threshold=0.05):
-        rows = self.data.to_dict('records')
-        tickers = [row['Ticker'] for row in rows]
-        # Fetch insider transactions
-        with Pool(cpu_count()) as pool:
-            processed_rows = list(
-                tqdm(
-                    pool.imap(get_recent_trades, tickers),
-                    total=len(tickers),
-                    desc="- Scraping recent insider trades"
-                )
-            )
         
-        for row, trade_data in zip(rows, processed_rows):
-            if trade_data:
-                row.update(trade_data)
+    def save_feature_distribution(self, output_file='feature_distribution.xlsx'):
+        # Define the quantiles and statistics to be calculated
+        quantiles = [0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1]
+        summary_df = pd.DataFrame()
+
+        for column in self.data.columns:
+            if pd.api.types.is_numeric_dtype(self.data[column]):
+                stats = self.data[column].quantile(quantiles).to_dict()
+                stats['mean'] = self.data[column].mean()
+                summary_df[column] = pd.Series(stats)
+
+        # Transpose the DataFrame so that each row is a feature
+        summary_df = summary_df.T
+        summary_df.columns = ['min', '1%', '5%', '10%', '25%', '50%', '75%', '90%', '95%', '99%', 'max', 'mean']
+
+        # Save the summary to an Excel file
+        data_dir = os.path.join(os.path.dirname(__file__), '../../data')
+        output_file = os.path.join(data_dir, output_file)
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
-        self.data = pd.DataFrame(rows)
-        
-        # Clean the data by dropping columns with more than 5% missing values and then dropping rows with missing values
-        self.data = clean_data(self.data, drop_threshold)
+        summary_df.to_excel(output_file, sheet_name='Feature Distribution')
+        print(f"- Feature distribution summary saved to {output_file}.")
     
+    def save_to_excel(self, file_path='output.xlsx'):
+        """Save the self.data DataFrame to an Excel file."""
+        data_dir = os.path.join(os.path.dirname(__file__), '../../data')
+        file_path = os.path.join(data_dir, file_path)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)  # Create the data directory if it doesn't exist
+        if not self.data.empty:
+            try:
+                self.data.to_excel(file_path, index=False)
+                print(f"- Data successfully saved to {file_path}.\n")
+            except Exception as e:
+                print(f"- Failed to save data to Excel: {e}")
+        else:
+            print("- No data to save.")
             
     def load_sheet(self, file_path='output.xlsx'):
         data_dir = os.path.join(os.path.dirname(__file__), '../../data')
@@ -167,6 +181,7 @@ class FeatureScraper:
         if os.path.exists(file_path):
             try:
                 self.data = pd.read_excel(file_path)
+                time.sleep(1)
                 print(f"- Sheet successfully loaded from {file_path}.")
             except Exception as e:
                 print(f"- Failed to load sheet from {file_path}: {e}")
@@ -180,9 +195,12 @@ class FeatureScraper:
         if self.data.empty: return pd.DataFrame()
         self.clean_table(drop_threshold=0.05)
         self.add_technical_indicators(drop_threshold=0.05)
-        self.add_financial_ratios(drop_threshold=0.2)
-        self.add_insider_transactions(drop_threshold=0.05)
+        self.add_financial_ratios(drop_threshold=0.5)
         elapsed_time = timedelta(seconds=int(time.time() - start_time))
         print(f"### END ### Feature Scraper - time elapsed: {elapsed_time}")
         return self.data
+        
+if __name__ == "__main__":
+    feature_scraper = FeatureScraper()
+    feature_scraper.run(num_days=12*4)
     

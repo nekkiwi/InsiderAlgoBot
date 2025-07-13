@@ -1,99 +1,115 @@
 import os
+import glob
 import joblib
 import pandas as pd
-from ast import literal_eval
-from sklearn.base import is_classifier
-from datetime import timedelta
-import time
+import numpy as np
+import re
 
 class ModelInference:
-    def __init__(self):
-        self.data_dir = os.path.join(os.path.dirname(__file__), '../../data')
-        self.feature_selection_file = os.path.join(self.data_dir, "analysis/feature_selection/selected_features.xlsx")
-        self.models = {}
-        self.out_path = ""
-        self.selected_features = []
-        self.data = {}
+    def __init__(self, model_type: str, category: str, timepoint: str, threshold_pct: int):
+        """
+        Initializes the inference engine with the core strategy parameters.
+        The 'top_n' and 'optimize_for' parameters are no longer needed, as all artifacts
+        are loaded from the strategy's dedicated directory.
+        """
+        self.model_type = model_type
+        self.category = category
+        self.timepoint = timepoint
+        self.threshold_pct = threshold_pct
+        
+        # Define base directories
+        self.base_dir = os.path.join(os.path.dirname(__file__), '../../data')
+        self.final_models_dir = os.path.join(self.base_dir, 'models')
+        self.output_dir = os.path.join(self.base_dir, 'inference')
 
-    def load_models(self, model, target):
-        # TODO: LIMSTOP IS NOT SUPPORTED
+    def _load_final_artifacts(self):
         """
-        Load 5-fold models for the given target from model_dir.
-        Expects files named '{target}_fold{i}.pkl' for i in 1..5.
+        Loads all final artifacts (models, features, and optimal threshold) 
+        from a single, self-contained strategy directory.
         """
-        model_dir = os.path.join(self.data_dir, f"models/{model}_{target}")
-        for i in range(1, 6):
-            path = os.path.join(model_dir, f"fold_{i}.joblib")
-            self.models[f'fold_{i}'] = joblib.load(path)
-        print(f"Loaded models for target '{target}': {list(self.models.keys())}")
+        models = {}
+        strategy_dir_name = f"{self.model_type}_{self.category}_{self.timepoint}_{self.threshold_pct}pct"
+        model_dir = os.path.join(self.final_models_dir, strategy_dir_name)
 
-    def load_feature_selection(self, target):
-        """
-        Read selected_features.xlsx, sheet named after target, cell C2 contains comma-separated features.
-        """
-        df = pd.read_excel(self.feature_selection_file, sheet_name=target)
-        raw = df.iloc[0, 2]
-        self.selected_features = list(literal_eval(raw))
-        print(f"Selected features for '{target}': {self.selected_features}")
+        if not os.path.isdir(model_dir):
+            raise FileNotFoundError(f"Final model directory not found: {model_dir}")
 
-    def load_scraped_data(self):
-        """
-        Load the latest scraped data (e.g. top 20 insider buys) from Excel.
-        """
-        self.data = pd.read_excel(self.scraped_data_file)
-        print(f"Loaded scraped data: {self.data.shape[0]} rows, {self.data.shape[1]} cols")
+        # --- Load all artifacts from the strategy directory ---
+        features_path = os.path.join(model_dir, "final_features.joblib")
+        threshold_path = os.path.join(model_dir, "optimal_threshold.joblib")
 
-    def filter_features(self):
+        if not os.path.exists(features_path) or not os.path.exists(threshold_path):
+            raise FileNotFoundError(f"Required artifacts (features or threshold) not found in {model_dir}")
+
+        final_features = joblib.load(features_path)
+        optimal_threshold = joblib.load(threshold_path)
+        
+        print(f"- Loaded {len(final_features)} features and optimal threshold ({optimal_threshold:.4f}) from '{strategy_dir_name}'.")
+
+        # --- Load all model pairs (classifier and regressor) ---
+        clf_dir = os.path.join(model_dir, "classifier_weights")
+        reg_dir = os.path.join(model_dir, "regressor_weights")
+        
+        clf_files = glob.glob(os.path.join(clf_dir, "final_clf_seed*.joblib"))
+        reg_files = glob.glob(os.path.join(reg_dir, "final_reg_seed*.joblib"))
+
+        if not clf_files:
+            raise FileNotFoundError(f"No classifier models found in {clf_dir}")
+
+        for f in clf_files:
+            seed = int(re.search(r'seed(\d+)', f).group(1))
+            models[seed] = {'clf': joblib.load(f)}
+        
+        for f in reg_files:
+            seed = int(re.search(r'seed(\d+)', f).group(1))
+            if seed in models:
+                models[seed]['reg'] = joblib.load(f)
+
+        print(f"- Loaded {len(models)} final model pairs.")
+        return models, final_features, optimal_threshold
+
+    def run(self, inference_df: pd.DataFrame):
         """
-        Subset self.data to only identifiers + selected features,
-        aligning exactly to training.
+        Full inference pipeline using the self-contained strategy artifacts.
         """
-        id_cols = ['Ticker', 'Filing Date']
-        # 1) move identifiers into index so reset_index won't re-introduce "index"
-        df = self.data.set_index(id_cols)
-        # 2) reindex to *only* selected_features, filling any missing ones with 0
-        df = df.reindex(columns=self.selected_features, fill_value=0)
-        # 3) bring identifiers back as columns
-        self.data = df.reset_index()
-        print(f"Filtered data to {len(self.selected_features)} features + identifiers: {self.data.shape}")
-
-
-
-    def run_inference(self, target) -> pd.DataFrame:
-        """
-        Run inference using the loaded models on filtered data.
-        Supports both classifiers (using predict_proba) and regressors (using predict).
-        """
-        X = self.data[self.selected_features]
-
-        preds = []
-        for name, model in self.models.items():
-            if is_classifier(model):
-                pred = model.predict_proba(X)[:, 1]
-            else:
-                pred = model.predict(X)
-            preds.append(pred)
-
-        avg_pred = sum(preds) / len(preds)
-
-        result = self.data[['Ticker', 'Filing Date']].copy()
-        result[f'{target}_score'] = avg_pred
-        return result
-
-    def run(self, features_df, models, targets):
-        """
-        Full pipeline: load models, features, data, filter, infer, save.
-        """
-        start_time = time.time()
-        print("\n### START ### Model Inference")
-        self.data = features_df
+        # --- 1. Load all artifacts from one location ---
+        models, final_features, optimal_threshold = self._load_final_artifacts()
+        
+        if inference_df is None or inference_df.empty:
+            print("Inference data is empty. Nothing to predict.")
+            return None
             
-        for model in models:
-            for target in targets: 
-                self.load_models(model, target)
-                self.load_feature_selection(target)
-                self.filter_features()
-                result_df = self.run_inference(target)
-        elapsed_time = timedelta(seconds=int(time.time() - start_time))
-        print(f"### END ### Model Inference - time elapsed: {elapsed_time}")
-        return result_df
+        # --- 2. Prepare inference data ---
+        # The 'FeaturePreprocessor' should have already prepared the data.
+        # This step ensures the columns are in the exact same order as during training.
+        X_inference = inference_df.reindex(columns=final_features, fill_value=0)
+
+        # --- 3. Run two-stage inference, averaging predictions across all seeds ---
+        all_clf_probas = [m['clf'].predict_proba(X_inference)[:, 1] for m in models.values()]
+        all_reg_preds = [m['reg'].predict(X_inference) for m in models.values() if 'reg' in m]
+
+        avg_clf_proba = np.mean(all_clf_probas, axis=0)
+        avg_reg_pred = np.mean(all_reg_preds, axis=0) if all_reg_preds else np.zeros_like(avg_clf_proba)
+        
+        # --- 4. Generate final signals and save the output ---
+        output_df = inference_df[['Ticker', 'Filing Date']].copy()
+        output_df['Classifier_Positive_Probability'] = avg_clf_proba
+        output_df['Predicted_Return'] = avg_reg_pred
+        
+        # A buy signal requires both a positive class and a predicted return above the optimal threshold
+        output_df['Final_Signal'] = (
+            (output_df['Classifier_Positive_Probability'] > 0.5) & 
+            (output_df['Predicted_Return'] >= optimal_threshold)
+        ).astype(int)
+
+        # os.makedirs(self.output_dir, exist_ok=True)
+        # strategy_name_for_file = f"{self.model_type}_{self.category}_{self.timepoint}_{self.threshold_pct}pct"
+        # output_filename = f"inference_output_{strategy_name_for_file}.xlsx"
+        # output_path = os.path.join(self.output_dir, output_filename)
+        
+        # output_df.sort_values(by='Final_Signal', ascending=False).to_excel(output_path, index=False)
+        
+        print(f"\nInference complete. {output_df['Final_Signal'].sum()} 'buy' signals generated.")
+        # print(f"Results saved to: {output_path}")
+
+        return output_df
