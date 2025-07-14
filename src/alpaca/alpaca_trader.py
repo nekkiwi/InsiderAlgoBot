@@ -65,11 +65,11 @@ class AlpacaTrader:
 
         if signals.empty:
             print("No valid 'buy' signals found in inference results.")
-            log_to_google_sheet("No new good buy found")
+            log_to_google_sheet("No new good buy found", self.sheet_name)
         else:
             symbols = signals["symbol"].tolist()
             if not self.buy_new(symbols, config["amount"], results_df):
-                log_to_google_sheet("No new good buy found")
+                log_to_google_sheet("No new good buy found", self.sheet_name)
 
         elapsed = timedelta(seconds=int(time.time() - start))
         print(f"### END ### Elapsed: {elapsed}")
