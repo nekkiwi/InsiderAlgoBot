@@ -104,8 +104,11 @@ class ModelInference:
             (output_df['Predicted_Return'] >= optimal_threshold)
         ).astype(int)
         
-        print(f"\nInference complete. {output_df['Final_Signal'].sum()} 'buy' signals generated.")
-        print(f"\nFull Inference results: \n{output_df}")
-        # print(f"Results saved to: {output_path}")
+        print(f"\nInference complete. {output_df['Final_Signal'].sum()} 'buy' signals generated.\n")
+        print(', '.join(output_df.columns))
+
+        # Print each row
+        for row in output_df.itertuples(index=False, name=None):
+            print(', '.join(map(str, row)))        # print(f"Results saved to: {output_path}")
 
         return output_df
