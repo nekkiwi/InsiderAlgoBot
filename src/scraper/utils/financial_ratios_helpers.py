@@ -5,30 +5,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
 # This is a provided helper function, unchanged.
-# def get_days_since_ipo(ticker, filing_date):
-#     """
-#     Calculate the number of days since IPO based on historical stock data.
-#     This function makes a single API call per ticker.
-#     """
-#     with open(os.devnull, 'w') as fnull:
-#         with contextlib.redirect_stdout(fnull), contextlib.redirect_stderr(fnull):
-#             stock = yf.Ticker(ticker)
-#             # This .history call fetches the entire price history to find the start date.
-#             historical_data = stock.history(period='max')
-    
-#             if historical_data.empty:
-#                 return None
-            
-#             ipo_date = historical_data.index.min()
-
-#             # Ensure timezone-naive for comparison
-#             ipo_date = ipo_date.tz_localize(None)
-#             if filing_date.tzinfo is not None:
-#                 filing_date = filing_date.tz_localize(None)
-
-#             return (filing_date - ipo_date).days
-
-# This is a provided helper function, unchanged.
 def calculate_financial_ratios(data):
     """Calculate and normalize financial ratios from the provided data payload."""
     ratios = {}
@@ -250,53 +226,6 @@ def process_single_ticker(row, tk_objects, hist_data, market_data_spy):
                 return None # Exit loop for other errors
 
     return None
-
-
-# def batch_fetch_financial_data(df, max_workers=4):
-#     """
-#     Processes each ticker, now including a point-in-time beta calculation
-#     by fetching and distributing SPY market data.
-#     """
-#     df_copy = df.copy()
-#     df_copy['Filing Date'] = pd.to_datetime(df_copy['Filing Date'], dayfirst=True)
-#     tickers = df_copy['Ticker'].unique().tolist()
-    
-#     # --- Step 1: Bulk Data Downloads ---
-#     print(f"Fetching fundamental data for {len(tickers)} tickers...")
-#     tk_objects = yf.Tickers(" ".join(tickers))
-    
-#     start_date = '1970-01-01'
-#     end_date = df_copy['Filing Date'].max() + pd.Timedelta(days=1)
-    
-#     print(f"Fetching historical prices for tickers from {start_date} to {end_date.date()}...")
-#     hist_data = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', progress=True, auto_adjust=False, threads=True)
-
-#     # --- Step 2: Fetch Market Index Data (SPY) ---
-#     print("Fetching market index data (SPY) for beta calculation...")
-#     market_data_spy = yf.download('SPY', start=start_date, end=end_date, auto_adjust=True, threads=True)
-#     # Ensure the index is a timezone-naive datetime object for safe comparisons
-#     market_data_spy.index = market_data_spy.index.tz_localize(None)
-
-#     # --- Step 3: Process Tickers in Parallel with SPY data ---
-#     results = []
-#     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-#         # Pass the market_data_spy object to each worker
-#         future_to_row = {
-#             executor.submit(process_single_ticker, row, tk_objects, hist_data, market_data_spy): row 
-#             for row in df_copy.to_dict('records')
-#         }
-        
-#         for future in tqdm(as_completed(future_to_row), total=len(future_to_row), desc="Processing Tickers in Parallel"):
-#             try:
-#                 result = future.result(timeout=30)
-#                 if result is not None:
-#                     results.append(result)
-#             except Exception as exc:
-#                 ticker = future_to_row[future].get('Ticker', 'Unknown')
-#                 # print(f"\n[DEBUG] ERROR: Task for ticker '{ticker}' generated an exception: {exc}")
-
-#     print(f"[INFO] Parallel processing finished. Successfully processed {len(results)} tickers.")
-#     return pd.DataFrame(results)
 
 def batch_fetch_financial_data(df, max_workers=4):
     """
