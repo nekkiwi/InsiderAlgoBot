@@ -38,7 +38,6 @@ class AlpacaTrader:
     def buy_new(self, symbols, amount_per_trade: float, results_df=None):
         placed = False
         for sym in symbols:
-            # --- CHANGE: Passes the dynamically calculated amount_per_trade ---
             if place_order(self.client, sym, amount_per_trade, results_df, self.sheet_name):
                 placed = True
         return placed
@@ -62,7 +61,6 @@ class AlpacaTrader:
             print("No valid 'buy' signals found in inference results.")
             log_to_google_sheet("No new good buy found", self.sheet_name)
         else:
-            # --- CHANGE: Calculate the dollar amount per trade from portfolio equity ---
             try:
                 account_info = self.client.get_account()
                 equity = float(account_info.equity)
