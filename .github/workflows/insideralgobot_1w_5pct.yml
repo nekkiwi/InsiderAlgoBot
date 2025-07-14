@@ -21,8 +21,8 @@ jobs:
       # --- Customizable Parameters ---
       # Change these values to alter the model and script behavior
       TIMEPOINT: '1w'
-      THRESHOLD_PCT: '5' # The numeric value for the percentage threshold
-      ALLOCATION_PCT: '2'
+      THRESHOLD_PCT: '5'
+      ALLOCATION_PCT: '5'
 
     steps:
       - name: Checkout code
