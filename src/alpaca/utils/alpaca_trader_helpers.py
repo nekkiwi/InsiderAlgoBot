@@ -7,6 +7,34 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 import time
 import numpy as np
+import re
+
+def convert_timepoints_to_bdays(timepoint) -> dict:
+    """
+    Converts a list of timepoint strings (e.g., '1w', '2m') into a
+    dictionary mapping the timepoint to its equivalent number of business days.
+    - 1 week ('w') = 5 business days
+    - 1 month ('m') = 20 business days
+    """
+    converted = 0
+    match = re.match(r"(\d+)([dwmy])", timepoint.lower())
+    if not match:
+        raise ValueError(f"Invalid timepoint format: '{timepoint}'. Use formats like '5d', '1w', '3m'.")
+    
+    num, unit = int(match.group(1)), match.group(2)
+    
+    if unit == 'd':
+        converted = num
+    elif unit == 'w':
+        converted = num * 5
+    elif unit == 'm':
+        converted = num * 20  # Approximate business days in a month
+    elif unit == 'y':
+        converted = num * 240 # Approximate business days in a year (12 * 20)
+    else:
+        raise ValueError(f"Unknown time unit: '{unit}' in timepoint '{timepoint}'")
+            
+    return converted
 
 def calculate_business_days(start_date: datetime, end_date: datetime) -> int:
     """
@@ -112,7 +140,7 @@ def log_to_google_sheet(message: str, sheet_name: str):
 
     worksheet.append_row([date_str, time_str, message], value_input_option="RAW")
     
-def sell_matured_positions(client, holding_period_days: int, sheet_name: str):
+def sell_matured_positions(client, holding_business_days: int, sheet_name: str):
     print("- Checking for positions to sell...")
     try:
         # Get the list of tickers this specific bot is allowed to sell
@@ -147,8 +175,8 @@ def sell_matured_positions(client, holding_period_days: int, sheet_name: str):
 
                 held_bdays = calculate_business_days(purchase_ts, datetime.now(timezone.utc)) + 1 # buy order was executed on hold day 1
 
-                if held_bdays < holding_period_days:
-                    print(f"✅ {position.symbol} held {held_bdays} business days — within holding period of {holding_period_days} b-days.")
+                if held_bdays < holding_business_days:
+                    print(f"✅ {position.symbol} held {held_bdays} business days — within holding period of {holding_business_days} b-days.")
                     continue
 
                 if market_open:

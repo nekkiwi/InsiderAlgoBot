@@ -10,6 +10,7 @@ from src.alpaca.utils.alpaca_trader_helpers import (
     log_to_google_sheet,
     sell_matured_positions,
     place_order,
+    convert_timepoints_to_bdays
 )
 
 class AlpacaTrader:
@@ -22,8 +23,8 @@ class AlpacaTrader:
         )
         self.sheet_name = ""
 
-    def sell_matured(self, holding_days: int):
-        sell_matured_positions(self.client, holding_days, self.sheet_name)
+    def sell_matured(self, holding_business_days: int):
+        sell_matured_positions(self.client, holding_business_days, self.sheet_name)
 
     @staticmethod
     def read_signals(results_df: pd.DataFrame) -> pd.DataFrame:
@@ -56,8 +57,10 @@ class AlpacaTrader:
         self.sheet_name = f"{config['timepoint']}-{config['threshold_pct']}%"
         print(f"### Logging to sheet: '{self.sheet_name}' ###")
 
+        holding_business_days = convert_timepoints_to_bdays(config['timepoint'])
+
         # 1) Sell any matured positions
-        self.sell_matured(config["holding_period"])
+        self.sell_matured(holding_business_days)
 
         # 2) Load & filter signals
         # --- FIX: Logic is simplified to trust the inference output ---

@@ -7,14 +7,6 @@ from src.scraper.feature_preprocess import FeaturePreprocessor
 from src.inference.model_inference import ModelInference
 from src.alpaca.alpaca_trader import AlpacaTrader
 
-def get_holding_period(timepoint: str) -> int:
-    """Converts a timepoint string (e.g., '1w', '1m') to a holding period in days."""
-    if 'w' in timepoint:
-        return int(timepoint.replace('w', '')) * 7
-    if 'm' in timepoint:
-        return int(timepoint.replace('m', '')) * 30
-    return 30
-
 def main(args):
     """
     Main function to run the complete trading bot pipeline.
@@ -26,7 +18,6 @@ def main(args):
     # Initializations #
     ###################
     
-    print("--- Initializing Bot Components ---")
     feature_scraper = FeatureScraper()
     alpaca_trader   = AlpacaTrader()
 
@@ -75,7 +66,6 @@ def main(args):
     print("\n--- Executing Trades based on Inference Results ---")
     trade_config = {
         "amount": 100,
-        "holding_period": get_holding_period(args.timepoint),
         "timepoint": args.timepoint,
         "threshold_pct": args.threshold_pct
     }
