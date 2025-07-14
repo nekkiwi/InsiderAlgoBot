@@ -6,7 +6,7 @@ on:
   workflow_dispatch:      # Allows manual run from GitHub
 
 jobs:
-  run-insideralgobot-short:
+  run-insideralgobot:
     runs-on: ubuntu-latest
 
     env:
