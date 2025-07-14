@@ -6,6 +6,18 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 import time
+import numpy as np
+
+def calculate_business_days(start_date: datetime, end_date: datetime) -> int:
+    """
+    Number of business days _between_ start_date and end_date,
+    excluding the end date itself. E.g.:
+
+      Mon→Tue  → 1  
+      Mon→Wed  → 2  
+      Fri→Mon  → 1  (skips weekend)  
+    """
+    return np.busday_count(start_date.date(), end_date.date())
 
 def get_latest_buy_order(client, symbol):
     return client.list_orders(
@@ -133,13 +145,14 @@ def sell_matured_positions(client, holding_period_days: int, sheet_name: str):
                 purchase_ts = make_timezone_aware(buy_order.filled_at)
                 buy_price = float(buy_order.filled_avg_price) if buy_order.filled_avg_price else None
 
-                held_days = (datetime.now(timezone.utc) - purchase_ts).days
-                if held_days < holding_period_days:
-                    print(f"✅ {position.symbol} held {held_days} days — within holding period for this bot.")
+                held_bdays = calculate_business_days(purchase_ts, datetime.now(timezone.utc)) + 1 # buy order was executed on hold day 1
+
+                if held_bdays < holding_period_days:
+                    print(f"✅ {position.symbol} held {held_bdays} business days — within holding period of {holding_period_days} b-days.")
                     continue
 
                 if market_open:
-                    print(f"ℹ️  Selling {position.symbol}, held {held_days} days.")
+                    print(f"ℹ️  Selling {position.symbol}, held {held_bdays} days.")
                     sell_order = submit_sell_order(client, position.symbol, position.qty)
                     
                     deadline = datetime.now(timezone.utc) + timedelta(minutes=5)
