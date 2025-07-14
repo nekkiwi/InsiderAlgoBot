@@ -23,7 +23,7 @@ class AlpacaTrader:
         self.sheet_name = ""
 
     def sell_matured(self, holding_days: int):
-        sell_matured_positions(self.client, holding_days)
+        sell_matured_positions(self.client, holding_days, self.sheet_name)
 
     @staticmethod
     def read_signals(results_df: pd.DataFrame) -> pd.DataFrame:
@@ -57,7 +57,7 @@ class AlpacaTrader:
         print(f"### Logging to sheet: '{self.sheet_name}' ###")
 
         # 1) Sell any matured positions
-        self.sell_matured(config["holding_period"], self.sheet_name)
+        self.sell_matured(config["holding_period"])
 
         # 2) Load & filter signals
         # --- FIX: Logic is simplified to trust the inference output ---
