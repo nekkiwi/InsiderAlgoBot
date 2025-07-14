@@ -6,16 +6,16 @@ import numpy as np
 import re
 
 class ModelInference:
-    def __init__(self, model_type: str, category: str, timepoint: str, threshold_pct: int):
+    def __init__(self):
         """
         Initializes the inference engine with the core strategy parameters.
         The 'top_n' and 'optimize_for' parameters are no longer needed, as all artifacts
         are loaded from the strategy's dedicated directory.
         """
-        self.model_type = model_type
-        self.category = category
-        self.timepoint = timepoint
-        self.threshold_pct = threshold_pct
+        self.model_type = "LightGBM"
+        self.category = "alpha"
+        self.timepoint = ""
+        self.threshold_pct = 0
         
         # Define base directories
         self.base_dir = os.path.join(os.path.dirname(__file__), '../../data')
@@ -68,10 +68,12 @@ class ModelInference:
         print(f"- Loaded {len(models)} final model pairs.")
         return models, final_features, optimal_threshold
 
-    def run(self, inference_df: pd.DataFrame):
+    def run(self, inference_df: pd.DataFrame, timepoint, threshold_pct):
         """
         Full inference pipeline using the self-contained strategy artifacts.
         """
+        self.timepoint = timepoint
+        self.threshold_pct = threshold_pct
         # --- 1. Load all artifacts from one location ---
         models, final_features, optimal_threshold = self._load_final_artifacts()
         

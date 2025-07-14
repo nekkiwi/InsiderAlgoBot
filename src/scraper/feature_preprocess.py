@@ -63,27 +63,6 @@ class FeaturePreprocessor:
     def identify_feature_types(self):
         self.categorical_features, self.continuous_features = identify_feature_types(self.data)
 
-    def filter_low_variance_features(self, variance_threshold=0.02, categorical_threshold=0.02):
-        cont_df = self.data[self.continuous_features]
-        cat_df  = self.data[self.categorical_features]
-        self.data, cont_df_filtered, cat_df_filtered = filter_low_variance_features(
-            self.data, cont_df, cat_df, variance_threshold, categorical_threshold
-        )
-        self.continuous_features = cont_df_filtered.columns.tolist()
-        self.categorical_features = cat_df_filtered.columns.tolist()
-
-    def calculate_and_plot_correlations(self, output_dir):
-        cont_df = self.data[self.continuous_features]
-        cat_df  = self.data[self.categorical_features]
-        self.corr_matrix = hybrid_correlation_matrix(self.data, cont_df, cat_df)
-        plot_correlation_heatmap(self.corr_matrix, output_dir)
-        plot_sorted_correlations(self.corr_matrix, output_dir)
-
-    def drop_highly_correlated_features(self, threshold=0.9):
-        self.data, self.corr_matrix = drop_highly_correlated_features(
-            self.data, self.corr_matrix, threshold
-        )
-
     def run(self, features_df: pd.DataFrame, timepoint, threshold_pct):
         start_time = time.time()
         print("\n### START ### Feature Preprocessing")
