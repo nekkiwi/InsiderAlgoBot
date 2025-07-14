@@ -1,8 +1,8 @@
-name: Daily InsiderAlgobot - 1w 5%
+name: Daily InsiderAlgobot - 1w 0%
 
 on:
   schedule:
-    - cron: '15 14 * * *'  # Every day at 14:00 UTC
+    - cron: '30 14 * * *'  # Every day at 14:00 UTC
   workflow_dispatch:      # Allows manual run from GitHub
 
 jobs:
@@ -21,8 +21,8 @@ jobs:
       # --- Customizable Parameters ---
       # Change these values to alter the model and script behavior
       TIMEPOINT: '1w'
-      THRESHOLD_PCT: '5'
-      ALLOCATION_PCT: '5'
+      THRESHOLD_PCT: '0'
+      ALLOCATION_PCT: '2'
 
     steps:
       - name: Checkout code
