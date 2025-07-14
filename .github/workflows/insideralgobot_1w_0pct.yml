@@ -2,7 +2,7 @@ name: Daily InsiderAlgobot - 1w 0%
 
 on:
   schedule:
-    - cron: '00 14 * * *'  # Every day at 14:00 UTC
+    - cron: '30 14 * * *'  # Every day at 14:00 UTC
   workflow_dispatch:      # Allows manual run from GitHub
 
 jobs:
