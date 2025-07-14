@@ -1,2 +1,0 @@
-# track every file under data/models, no matter how deep
-data/models/** filter=lfs diff=lfs merge=lfs -text
