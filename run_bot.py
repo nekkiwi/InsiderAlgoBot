@@ -46,7 +46,7 @@ def main(args):
     ####################
 
     print("\n--- Scraping and Preprocessing New Data ---")
-    current_features_df = feature_scraper.run(num_days=2)
+    current_features_df = feature_scraper.run(num_days=1)
     if current_features_df is None or current_features_df.empty:
         print("No new data scraped. Exiting.")
         return
