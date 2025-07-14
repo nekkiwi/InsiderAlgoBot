@@ -103,6 +103,12 @@ def log_to_google_sheet(message: str, sheet_name: str):
 def sell_matured_positions(client, holding_period_days: int, sheet_name: str):
     print("- Checking for positions to sell...")
     try:
+        # Get the list of tickers this specific bot is allowed to sell
+        bot_owned_tickers = get_bot_bought_tickers(sheet_name)
+        if not bot_owned_tickers:
+            print("ℹ️  This bot has no buy history. No positions will be sold.")
+            return
+
         positions = client.list_positions()
         if not positions:
             print("ℹ️  No open positions to check.")
@@ -112,6 +118,11 @@ def sell_matured_positions(client, holding_period_days: int, sheet_name: str):
         market_open = clock.is_open
 
         for position in positions:
+            # *** CORE LOGIC CHANGE: Only check positions this bot owns ***
+            if position.symbol not in bot_owned_tickers:
+                print(f"ℹ️  Skipping {position.symbol}: Not owned by bot '{sheet_name}'.")
+                continue
+
             try:
                 buy_orders = get_latest_buy_order(client, position.symbol)
                 if not buy_orders:
@@ -124,7 +135,7 @@ def sell_matured_positions(client, holding_period_days: int, sheet_name: str):
 
                 held_days = (datetime.now(timezone.utc) - purchase_ts).days
                 if held_days < holding_period_days:
-                    print(f"✅ {position.symbol} held {held_days} days — within holding period.")
+                    print(f"✅ {position.symbol} held {held_days} days — within holding period for this bot.")
                     continue
 
                 if market_open:
@@ -156,7 +167,7 @@ def sell_matured_positions(client, holding_period_days: int, sheet_name: str):
                     log_to_google_sheet("Sell to be executed but market is closed.", sheet_name)
                     break 
             except Exception as e:
-                log_to_google_sheet(f"Error selling {position.symbol}: {e}", sheet_name)
+                log_to_google_sheet(f"Error processing position {position.symbol}: {e}", sheet_name)
 
     except Exception as e:
         log_to_google_sheet(f"Error fetching positions: {e}", sheet_name)
@@ -180,7 +191,9 @@ def place_order(client, symbol: str, amount: float, results_df, sheet_name: str)
         submit_buy_order(client, symbol, qty_to_buy)
         order_placed = True
         
-        log_message = f"Buy executed: {symbol} for {price*qty_to_buy}$"
+        # Ensure total value is formatted correctly
+        total_value = f"{price * qty_to_buy:.2f}"
+        log_message = f"Buy executed: {symbol} for ${total_value}"
         if results_df is not None:
             details = get_fundamentals_and_prediction(symbol, results_df)
             log_message = f"{log_message}, {details}"
@@ -189,3 +202,42 @@ def place_order(client, symbol: str, amount: float, results_df, sheet_name: str)
     except Exception as e:
         print(f"Error buying {symbol}: {e}")
     return order_placed
+
+def get_bot_bought_tickers(sheet_name: str) -> list[str]:
+    """
+    Reads the log for a specific bot and returns a list of tickers
+    it has bought.
+    """
+    print(f"Reading buy history from sheet: '{sheet_name}'...")
+    load_dotenv()
+    scopes = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+    ]
+    try:
+        creds_dict = json.loads(os.getenv("GOOGLE_SHEET_CREDS_JSON"))
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        gc = gspread.authorize(creds)
+        sh = gc.open("InsiderAlgoBot - Log")
+        
+        worksheet = sh.worksheet(sheet_name)
+        records = worksheet.get_all_records() # Gets records as a list of dicts
+        
+        bought_tickers = set()
+        for record in records:
+            message = record.get("Message", "")
+            if message.startswith("Buy executed:"):
+                # Extracts the ticker, e.g., from "Buy executed: AAPL for 150.00$"
+                parts = message.split()
+                if len(parts) > 2:
+                    bought_tickers.add(parts[2])
+        
+        print(f"Found {len(bought_tickers)} unique tickers bought by this bot.")
+        return list(bought_tickers)
+        
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"Worksheet '{sheet_name}' not found. Assuming no buy history.")
+        return []
+    except Exception as e:
+        print(f"An error occurred while reading Google Sheet: {e}")
+        return []
