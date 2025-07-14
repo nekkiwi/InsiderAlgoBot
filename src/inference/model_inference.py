@@ -101,15 +101,9 @@ class ModelInference:
             (output_df['Classifier_Positive_Probability'] > 0.5) & 
             (output_df['Predicted_Return'] >= optimal_threshold)
         ).astype(int)
-
-        # os.makedirs(self.output_dir, exist_ok=True)
-        # strategy_name_for_file = f"{self.model_type}_{self.category}_{self.timepoint}_{self.threshold_pct}pct"
-        # output_filename = f"inference_output_{strategy_name_for_file}.xlsx"
-        # output_path = os.path.join(self.output_dir, output_filename)
-        
-        # output_df.sort_values(by='Final_Signal', ascending=False).to_excel(output_path, index=False)
         
         print(f"\nInference complete. {output_df['Final_Signal'].sum()} 'buy' signals generated.")
+        print(f"\nFull Inference results: \n{output_df}")
         # print(f"Results saved to: {output_path}")
 
         return output_df

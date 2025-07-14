@@ -76,6 +76,8 @@ def main(args):
     trade_config = {
         "amount": 100,
         "holding_period": get_holding_period(args.timepoint),
+        "timepoint": args.timepoint,
+        "threshold": args.threshold_pct
     }
     
     print(f"Trade Execution Config: {trade_config}")

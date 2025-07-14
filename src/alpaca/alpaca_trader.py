@@ -20,6 +20,7 @@ class AlpacaTrader:
             os.getenv("ALPACA_API_SECRET_KEY"),
             "https://paper-api.alpaca.markets",
         )
+        self.sheet_name = ""
 
     def sell_matured(self, holding_days: int):
         sell_matured_positions(self.client, holding_days)
@@ -44,7 +45,7 @@ class AlpacaTrader:
     def buy_new(self, symbols, amount: float, results_df=None):
         placed = False
         for sym in symbols:
-            if place_order(self.client, sym, amount, results_df):
+            if place_order(self.client, sym, amount, results_df, self.sheet_name):
                 placed = True
         return placed
 
@@ -52,8 +53,11 @@ class AlpacaTrader:
         start = time.time()
         print("\n### START ### Alpaca Trader")
 
+        self.sheet_name = f"{config['timepoint']}-{config['threshold_pct']}%"
+        print(f"### Logging to sheet: '{self.sheet_name}' ###")
+
         # 1) Sell any matured positions
-        self.sell_matured(config["holding_period"])
+        self.sell_matured(config["holding_period"], self.sheet_name)
 
         # 2) Load & filter signals
         # --- FIX: Logic is simplified to trust the inference output ---

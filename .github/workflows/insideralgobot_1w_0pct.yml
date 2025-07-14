@@ -1,4 +1,4 @@
-name: Run InsiderAlgoBot Daily
+name: Daily InsiderAlgobot - 1w 0%
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:      # Allows manual run from GitHub
 
 jobs:
-  run-bot:
+  run-insideralgobot-short:
     runs-on: ubuntu-latest
 
     env:
