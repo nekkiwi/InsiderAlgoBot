@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from io import StringIO
 from pandas.tseries.offsets import BDay
 
-def get_date_spans(num_days: int):
+def get_date_spans(num_business_days: int):
     """
     Returns a list of (start_datetime, end_datetime) tuples for the
     last `num_days` business days.  Each span covers the business day
@@ -24,7 +24,7 @@ def get_date_spans(num_days: int):
     last_bd = today - BDay(1)
 
     # collect the last `num_days` business days
-    bdays = pd.bdate_range(end=last_bd, periods=num_days)
+    bdays = pd.bdate_range(end=last_bd, periods=num_business_days)
 
     spans = []
     for bd in bdays:

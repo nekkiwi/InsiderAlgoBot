@@ -21,8 +21,8 @@ class FeatureScraper:
         url = f"{self.base_url}pl=1&ph=&ll=&lh=&fd=-1&fdr={start_date.month}%2F{start_date.day}%2F{start_date.year}+-+{end_date.month}%2F{end_date.day}%2F{end_date.year}&td=0&tdr=&fdlyl=&fdlyh=&daysago=&xp=1&vl=10&vh=&ocl=&och=&sic1=-1&sicl=100&sich=9999&grp=0&nfl=&nfh=&nil=&nih=&nol=&noh=&v2l=&v2h=&oc2l=&oc2h=&sortcol=0&cnt=1000&page=1"
         return fetch_and_parse(url)
 
-    def fetch_data_from_pages(self, num_days):
-        spans = get_date_spans(num_days)
+    def fetch_data_from_pages(self, num_business_days):
+        spans = get_date_spans(num_business_days)
         if not spans:
             log_to_google_sheet("No trade on weekends")
             return
@@ -190,10 +190,10 @@ class FeatureScraper:
         else:
             print(f"- File '{file_path}' does not exist.")
         
-    def run(self, num_days):
+    def run(self, num_business_days):
         start_time = time.time()
         print("\n### START ### Feature Scraper")
-        self.fetch_data_from_pages(num_days)
+        self.fetch_data_from_pages(num_business_days)
         if self.data.empty: return pd.DataFrame()
         self.clean_table(drop_threshold=0.05)
         self.add_technical_indicators(drop_threshold=0.05)
@@ -201,8 +201,3 @@ class FeatureScraper:
         elapsed_time = timedelta(seconds=int(time.time() - start_time))
         print(f"### END ### Feature Scraper - time elapsed: {elapsed_time}")
         return self.data
-        
-if __name__ == "__main__":
-    feature_scraper = FeatureScraper()
-    feature_scraper.run(num_days=12*4)
-    
