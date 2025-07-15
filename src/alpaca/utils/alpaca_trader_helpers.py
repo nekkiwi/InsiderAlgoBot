@@ -214,7 +214,7 @@ def sell_matured_positions(client, holding_business_days: int, sheet_name: str):
         log_to_google_sheet(f"Error fetching positions: {e}", sheet_name)
         
         
-def place_order(client, symbol: str, amount: float, results_df, sheet_name: str):
+def place_order(client, symbol: str, amount: float, results_df, sheet_name: str, buy_history):
     print("- Checking for stocks to buy...")
     order_placed = False
     held_symbols = {p.symbol for p in client.list_positions()}
