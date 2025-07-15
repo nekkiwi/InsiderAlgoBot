@@ -37,8 +37,11 @@ class AlpacaTrader:
 
     def buy_new(self, symbols, amount_per_trade: float, results_df=None):
         placed = False
+        bot_buy_history = get_bot_bought_tickers(self.sheet_name)
+        
         for sym in symbols:
-            if place_order(self.client, sym, amount_per_trade, results_df, self.sheet_name):
+            # Pass the fetched history to the place_order function
+            if place_order(self.client, sym, amount_per_trade, results_df, self.sheet_name, bot_buy_history):
                 placed = True
         return placed
 
