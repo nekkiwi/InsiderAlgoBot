@@ -10,7 +10,8 @@ from src.alpaca.utils.alpaca_trader_helpers import (
     log_to_google_sheet,
     sell_matured_positions,
     place_order,
-    convert_timepoints_to_bdays
+    convert_timepoints_to_bdays,
+    get_bot_bought_tickers
 )
 
 class AlpacaTrader:
