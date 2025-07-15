@@ -221,27 +221,36 @@ def place_order(client, symbol: str, amount: float, results_df, sheet_name: str)
     open_orders = client.list_orders(status='open')
     open_buy_symbols = {o.symbol for o in open_orders if o.side == 'buy'}
 
-    if symbol in held_symbols or symbol in open_buy_symbols:
+    if symbol in buy_history:
+        print(f"ℹ️  Skipping {symbol}: Already in this bot's buy history.")
+        return order_placed
+    
+    if symbol in open_buy_symbols:
+        print(f"ℹ️  Skipping {symbol}: Already has an open buy order.")
         return order_placed
 
     try:
         price, qty_to_buy = get_price_and_quantity(client, symbol, amount)
         if qty_to_buy <= 0:
+            print(f"ℹ️  Skipping {symbol}: Not enough capital for one share at current price.")
             return order_placed
 
         submit_buy_order(client, symbol, qty_to_buy)
         order_placed = True
         
-        # Ensure total value is formatted correctly
         total_value = f"{price * qty_to_buy:.2f}"
         log_message = f"Buy executed: {symbol} for ${total_value}"
         if results_df is not None:
             details = get_fundamentals_and_prediction(symbol, results_df)
             log_message = f"{log_message}, {details}"
+        
         log_to_google_sheet(log_message, sheet_name)
+        print(f"✅ {log_message}")
 
     except Exception as e:
         print(f"Error buying {symbol}: {e}")
+        log_to_google_sheet(f"Failed to place buy order for {symbol}: {e}", sheet_name)
+        
     return order_placed
 
 def get_bot_bought_tickers(sheet_name: str) -> list[str]:
