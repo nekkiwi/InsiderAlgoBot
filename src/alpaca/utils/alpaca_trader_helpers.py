@@ -193,7 +193,7 @@ def sell_matured_positions(client, holding_business_days: int, sheet_name: str):
                         time.sleep(5)
 
                     if sell_price is None:
-                        log_to_google_sheet(f"Sell for {position.symbol} did not fill in time.", sheet_name)
+                        log_to_google_sheet(f"Sell order for {position.symbol} did not fill in time.", sheet_name)
                     elif buy_price is not None:
                         ret = (sell_price - buy_price) / buy_price
                         ret_pct = round(ret * 100, 2)
@@ -235,11 +235,30 @@ def place_order(client, symbol: str, amount: float, results_df, sheet_name: str,
             print(f"ℹ️  Skipping {symbol}: Not enough capital for one share at current price.")
             return order_placed
 
-        submit_buy_order(client, symbol, qty_to_buy)
-        order_placed = True
+        buy_order = submit_buy_order(client, symbol, qty_to_buy)
         
+        deadline = datetime.now(timezone.utc) + timedelta(minutes=5)
+        filled_avg_price = None
+        filled_qty = None
+        while datetime.now(timezone.utc) < deadline:
+            o = client.get_order(buy_order.id)
+            if o.status == 'filled':
+                filled_avg_price = float(o.filled_avg_price)
+                filled_qty = float(o.filled_qty)
+                break
+            time.sleep(5)
+        
+        if filled_avg_price is None:
+            log_to_google_sheet(f"Buy order for {symbol} did not fill in time.", sheet_name)
+            print(f"⚠️  Buy order for {symbol} did not fill within 5 minutes.")
+            # Attempt to cancel the lingering order
+            try: client.cancel_order(buy_order.id)
+            except Exception as cancel_e: print(f"Could not cancel order for {symbol}: {cancel_e}")
+            return order_placed
+        
+        order_placed = True
         total_value = f"{price * qty_to_buy:.2f}"
-        log_message = f"Buy executed: {symbol} for ${total_value}"
+        log_message = f"Buy executed: {filled_qty} {symbol} at avg price ${filled_avg_price:.2f} for ${total_value:.2f}"
         if results_df is not None:
             details = get_fundamentals_and_prediction(symbol, results_df)
             log_message = f"{log_message}, {details}"
