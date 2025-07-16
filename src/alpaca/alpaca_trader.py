@@ -47,9 +47,6 @@ class AlpacaTrader:
         placed = False
         bot_buy_history = get_bot_bought_tickers(self.sheet_name)
         
-        # Also get currently held positions to avoid re-buying something that hasn't been sold yet.
-        held_symbols = {p.symbol for p in self.client.list_positions()}
-        
         for sym in symbols:
             if sym in bot_buy_history:
                 print(f"ℹ️  Skipping {sym}: Already in this bot's historical buys (from '{self.sheet_name}' sheet).")

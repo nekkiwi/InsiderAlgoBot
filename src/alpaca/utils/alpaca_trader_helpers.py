@@ -302,10 +302,10 @@ def get_bot_bought_tickers(sheet_name: str) -> list[str]:
         for record in records:
             message = record.get("Message", "")
             if message.startswith("Buy executed:"):
-                # Extracts the ticker, e.g., from "Buy executed: AAPL for 150.00$"
-                parts = message.split()
-                if len(parts) > 2:
-                    bought_tickers.add(parts[2])
+                match = re.search(r"Buy executed: \d+\.?\d* ([A-Z]+)", message)
+                if match:
+                    ticker = match.group(1)
+                    bought_tickers.add(ticker)
         
         print(f"Found {len(bought_tickers)} unique tickers bought by this bot.")
         return list(bought_tickers)
