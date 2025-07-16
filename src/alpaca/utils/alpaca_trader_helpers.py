@@ -214,32 +214,33 @@ def sell_matured_positions(client, holding_business_days: int, sheet_name: str):
         log_to_google_sheet(f"Error fetching positions: {e}", sheet_name)
         
         
-def place_order(client, symbol: str, amount: float, results_df, sheet_name: str, buy_history):
-    print("- Checking for stocks to buy...")
-    order_placed = False
-    held_symbols = {p.symbol for p in client.list_positions()}
-    open_orders = client.list_orders(status='open')
-    open_buy_symbols = {o.symbol for o in open_orders if o.side == 'buy'}
-
-    if symbol in buy_history:
-        print(f"ℹ️  Skipping {symbol}: Already in this bot's buy history.")
-        return order_placed
+def place_order(client, symbol: str, amount: float, results_df, sheet_name: str):
+    """
+    Executes a buy order for a given symbol and logs the result.
+    This function assumes the decision to buy has already been made.
+    """
+    print(f"- Attempting to place buy order for {symbol}...")
     
+    # Check for open orders one last time to be safe
+    open_buy_symbols = {o.symbol for o in client.list_orders(status='open') if o.side == 'buy'}
     if symbol in open_buy_symbols:
-        print(f"ℹ️  Skipping {symbol}: Already has an open buy order.")
-        return order_placed
+        print(f"ℹ️  Skipping {symbol}: An open buy order already exists.")
+        return False
 
     try:
+        # Get price and quantity to buy
         price, qty_to_buy = get_price_and_quantity(client, symbol, amount)
         if qty_to_buy <= 0:
             print(f"ℹ️  Skipping {symbol}: Not enough capital for one share at current price.")
-            return order_placed
+            return False
 
+        # Submit the order
         buy_order = submit_buy_order(client, symbol, qty_to_buy)
+        print(f"  -> Submitted buy order for {qty_to_buy} shares of {symbol}. Waiting for fill...")
         
+        # Wait for the order to fill to get the actual execution details
         deadline = datetime.now(timezone.utc) + timedelta(minutes=5)
-        filled_avg_price = None
-        filled_qty = None
+        filled_order_details = None
         while datetime.now(timezone.utc) < deadline:
             o = client.get_order(buy_order.id)
             if o.status == 'filled':
@@ -249,17 +250,16 @@ def place_order(client, symbol: str, amount: float, results_df, sheet_name: str,
                 }
                 break
             time.sleep(5)
-        
+            
         if filled_order_details is None:
             log_to_google_sheet(f"Buy order for {symbol} did not fill in time.", sheet_name)
-            print(f"⚠️  Buy order for {symbol} did not fill within 5 minutes.")
+            print(f"⚠️  Buy order for {symbol} did not fill within 5 minutes. Cancelling...")
             try: client.cancel_order(buy_order.id)
             except Exception as cancel_e: print(f"Could not cancel order for {symbol}: {cancel_e}")
             return False
             
-        # Now, use the correctly typed numeric values from the dictionary
+        # Log the successful, filled order
         total_value = filled_order_details["avg_price"] * filled_order_details["qty"]
-        
         log_message = (
             f"Buy executed: {filled_order_details['qty']} {symbol} "
             f"at avg price ${filled_order_details['avg_price']:.2f} for ${total_value:.2f}"
@@ -274,8 +274,7 @@ def place_order(client, symbol: str, amount: float, results_df, sheet_name: str,
         return True
 
     except Exception as e:
-        # This is where your error was caught. The traceback shows the exception type.
-        print(f"Error buying {symbol}: {e}")
+        print(f"Error during order placement for {symbol}: {e}")
         log_to_google_sheet(f"Failed to place buy order for {symbol}: {e}", sheet_name)
         return False
 

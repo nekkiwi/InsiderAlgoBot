@@ -33,17 +33,37 @@ class AlpacaTrader:
         if buy_signals_df.empty:
             return pd.DataFrame(columns=["symbol", "score"])
         out = buy_signals_df[['Ticker', 'Predicted_Return']].copy()
+        # Sort by prediction score so the best signal is first
+        buy_signals_df.sort_values(by='Predicted_Return', ascending=False, inplace=True)
+        # Drop duplicate tickers, keeping only the first (highest score) one
+        unique_signals_df = buy_signals_df.drop_duplicates(subset='Ticker', keep='first')
+        print(f"Found {len(unique_signals_df)} unique 'buy' signals after de-duplication.")
+        
+        out = unique_signals_df[['Ticker', 'Predicted_Return']].copy()
         out.columns = ["symbol", "score"]
         return out
-
+    
     def buy_new(self, symbols, amount_per_trade: float, results_df=None):
         placed = False
         bot_buy_history = get_bot_bought_tickers(self.sheet_name)
         
+        # Also get currently held positions to avoid re-buying something that hasn't been sold yet.
+        held_symbols = {p.symbol for p in self.client.list_positions()}
+        
         for sym in symbols:
-            # Pass the fetched history to the place_order function
-            if place_order(self.client, sym, amount_per_trade, results_df, self.sheet_name, bot_buy_history):
+            if sym in bot_buy_history:
+                print(f"ℹ️  Skipping {sym}: Already in this bot's historical buys (from Google Sheet).")
+                continue
+                
+            if sym in held_symbols:
+                print(f"ℹ️  Skipping {sym}: Position is currently held in the portfolio.")
+                continue
+
+            # If all checks pass, proceed to place the order.
+            # The 'place_order' helper is now just responsible for execution.
+            if place_order(self.client, sym, amount_per_trade, results_df, self.sheet_name):
                 placed = True
+        
         return placed
 
     def run(self, config: dict, results_df: pd.DataFrame = None):
