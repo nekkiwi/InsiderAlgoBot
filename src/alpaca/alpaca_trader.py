@@ -52,15 +52,9 @@ class AlpacaTrader:
         
         for sym in symbols:
             if sym in bot_buy_history:
-                print(f"ℹ️  Skipping {sym}: Already in this bot's historical buys (from Google Sheet).")
+                print(f"ℹ️  Skipping {sym}: Already in this bot's historical buys (from '{self.sheet_name}' sheet).")
                 continue
                 
-            if sym in held_symbols:
-                print(f"ℹ️  Skipping {sym}: Position is currently held in the portfolio.")
-                continue
-
-            # If all checks pass, proceed to place the order.
-            # The 'place_order' helper is now just responsible for execution.
             if place_order(self.client, sym, amount_per_trade, results_df, self.sheet_name):
                 placed = True
         
