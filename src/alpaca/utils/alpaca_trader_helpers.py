@@ -243,34 +243,41 @@ def place_order(client, symbol: str, amount: float, results_df, sheet_name: str,
         while datetime.now(timezone.utc) < deadline:
             o = client.get_order(buy_order.id)
             if o.status == 'filled':
-                filled_avg_price = float(o.filled_avg_price)
-                filled_qty = float(o.filled_qty)
+                filled_order_details = {
+                    "avg_price": float(o.filled_avg_price),
+                    "qty": float(o.filled_qty)
+                }
                 break
             time.sleep(5)
         
-        if filled_avg_price is None:
+        if filled_order_details is None:
             log_to_google_sheet(f"Buy order for {symbol} did not fill in time.", sheet_name)
             print(f"⚠️  Buy order for {symbol} did not fill within 5 minutes.")
-            # Attempt to cancel the lingering order
             try: client.cancel_order(buy_order.id)
             except Exception as cancel_e: print(f"Could not cancel order for {symbol}: {cancel_e}")
-            return order_placed
+            return False
+            
+        # Now, use the correctly typed numeric values from the dictionary
+        total_value = filled_order_details["avg_price"] * filled_order_details["qty"]
         
-        order_placed = True
-        total_value = f"{price * qty_to_buy:.2f}"
-        log_message = f"Buy executed: {filled_qty} {symbol} at avg price ${filled_avg_price:.2f} for ${total_value:.2f}"
+        log_message = (
+            f"Buy executed: {filled_order_details['qty']} {symbol} "
+            f"at avg price ${filled_order_details['avg_price']:.2f} for ${total_value:.2f}"
+        )
+        
         if results_df is not None:
             details = get_fundamentals_and_prediction(symbol, results_df)
             log_message = f"{log_message}, {details}"
         
         log_to_google_sheet(log_message, sheet_name)
         print(f"✅ {log_message}")
+        return True
 
     except Exception as e:
+        # This is where your error was caught. The traceback shows the exception type.
         print(f"Error buying {symbol}: {e}")
         log_to_google_sheet(f"Failed to place buy order for {symbol}: {e}", sheet_name)
-        
-    return order_placed
+        return False
 
 def get_bot_bought_tickers(sheet_name: str) -> list[str]:
     """
