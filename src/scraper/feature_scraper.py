@@ -196,7 +196,7 @@ class FeatureScraper:
         self.fetch_data_from_pages(num_business_days)
         if self.data.empty: return pd.DataFrame()
         self.clean_table(drop_threshold=0.05)
-        self.add_technical_indicators(drop_threshold=0.05)
+        self.add_technical_indicators(drop_threshold=1.0)
         self.add_financial_ratios(drop_threshold=1.0)
         elapsed_time = timedelta(seconds=int(time.time() - start_time))
         print(f"### END ### Feature Scraper - time elapsed: {elapsed_time}")
