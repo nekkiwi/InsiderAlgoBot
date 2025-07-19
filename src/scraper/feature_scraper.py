@@ -15,6 +15,7 @@ class FeatureScraper:
         self.base_url = "http://openinsider.com/screener?"
         self.data = pd.DataFrame()
         self.train = False
+        self.sheet_name = ""
         
     def process_web_page(self, date_range):
         start_date, end_date = date_range
@@ -190,9 +191,10 @@ class FeatureScraper:
         else:
             print(f"- File '{file_path}' does not exist.")
         
-    def run(self, num_business_days):
+    def run(self, num_business_days, timepoint, threshold_pct):
         start_time = time.time()
         print("\n### START ### Feature Scraper")
+        self.sheet_name = f"{timepoint}-{threshold_pct}%"
         self.fetch_data_from_pages(num_business_days)
         if self.data.empty: return pd.DataFrame()
         self.clean_table(drop_threshold=0.05)
