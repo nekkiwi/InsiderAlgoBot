@@ -25,7 +25,7 @@ class FeatureScraper:
     def fetch_data_from_pages(self, num_business_days):
         spans = get_date_spans(num_business_days)
         if not spans:
-            log_to_google_sheet("No trade on weekends")
+            log_to_google_sheet("No trade on weekends", self.sheet_name)
             return
 
         # build a single human-readable span for tqdm  
@@ -48,7 +48,7 @@ class FeatureScraper:
             print(f"- {len(self.data)} total entries extracted!")
         else:
             print(f"🚫 No trades were made today")
-            log_to_google_sheet(f"No trades were found today")
+            log_to_google_sheet(f"No trades were found today", self.sheet_name)
     
     def clean_table(self, drop_threshold=0.05):
         columns_of_interest = ["Filing Date", "Trade Date", "Ticker", "Title", "Price", "Qty", "Owned", "ΔOwn", "Value"]
